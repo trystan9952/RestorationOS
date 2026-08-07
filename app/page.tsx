@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
@@ -19,9 +21,12 @@ export default function Home() {
           We'll build the Twin.
         </p>
 
-        <button className="mt-14 rounded-xl bg-blue-600 px-8 py-4 text-lg font-semibold shadow-xl transition-all duration-300 hover:bg-blue-500 hover:scale-105">
+        <Link
+          href="/new-loss"
+          className="mt-14 inline-block rounded-xl bg-blue-600 px-8 py-4 text-lg font-semibold shadow-xl transition-all duration-300 hover:bg-blue-500 hover:scale-105"
+        >
           Build Digital Twin
-        </button>
+        </Link>
 
       </div>
     </main>
