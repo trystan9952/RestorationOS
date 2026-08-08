@@ -1,0 +1,7 @@
+rooms
+
+addRoom()
+
+removeRoom()
+
+updateRoom()
