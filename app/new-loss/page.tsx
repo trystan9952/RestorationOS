@@ -40,7 +40,10 @@ export default function NewLossPage() {
           />
 
           <div className="mt-8">
-            <Button text="Continue" />
+          <Button
+    text="Continue"
+    href="/dashboard"
+/>
           </div>
 
         </div>
