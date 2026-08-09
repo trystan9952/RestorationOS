@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTwinStore } from "@/lib/store/useTwinStore";
 
@@ -23,9 +23,14 @@ import { Input } from "@/components/ui/input";
 export default function RoomsPage() {
   const rooms = useTwinStore((state) => state.rooms);
   const addRoom = useTwinStore((state) => state.addRoom);
+  const hydrateFromDatabase = useTwinStore((state) => state.hydrateFromDatabase);
 
   const [open, setOpen] = useState(false);
   const [roomName, setRoomName] = useState("");
+
+  useEffect(() => {
+    void hydrateFromDatabase();
+  }, [hydrateFromDatabase]);
 
   function resetForm() {
     setRoomName("");
@@ -39,12 +44,12 @@ export default function RoomsPage() {
     }
   }
 
-  function handleSave() {
+  async function handleSave() {
     const name = roomName.trim();
 
     if (!name) return;
 
-    addRoom(name);
+    await addRoom(name);
 
     setOpen(false);
     resetForm();
@@ -93,16 +98,11 @@ export default function RoomsPage() {
             </div>
 
             <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline">
-                  Cancel
-                </Button>
+              <DialogClose render={<Button variant="outline" />}>
+                Cancel
               </DialogClose>
 
-              <Button
-                onClick={handleSave}
-                disabled={!roomName.trim()}
-              >
+              <Button onClick={handleSave} disabled={!roomName.trim()}>
                 Save
               </Button>
             </DialogFooter>
@@ -118,10 +118,7 @@ export default function RoomsPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {rooms.map((room) => (
-              <Link
-                key={room.id}
-                href={`/room/${room.id}`}
-              >
+              <Link key={room.id} href={`/room/${room.id}`}>
                 <Card className="cursor-pointer transition-all hover:border-blue-500 hover:shadow-lg hover:scale-[1.02]">
                   <CardHeader>
                     <CardTitle>{room.name}</CardTitle>

@@ -1,7 +1,0 @@
-rooms
-
-addRoom()
-
-removeRoom()
-
-updateRoom()
