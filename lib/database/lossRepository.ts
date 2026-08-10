@@ -1,5 +1,5 @@
 import { unwrapQuery, unwrapSingle } from "@/lib/database/errors";
-import type { Loss, LossStatus } from "@/lib/domain/Loss";
+import type { Loss, LossStatus, LossType } from "@/lib/domain/Loss";
 import { getSupabaseClient } from "@/lib/supabase";
 import type { Database, LossRow } from "@/types/database";
 
@@ -11,6 +11,8 @@ export type CreateLossInput = {
   phone: string;
   insurance: string;
   claimNumber: string;
+  lossType: LossType;
+  dateOfLoss: string;
   status?: LossStatus;
 };
 
@@ -20,6 +22,8 @@ export type UpdateLossInput = {
   phone?: string;
   insurance?: string;
   claimNumber?: string;
+  lossType?: LossType;
+  dateOfLoss?: string;
   status?: LossStatus;
 };
 
@@ -31,7 +35,9 @@ function mapLossRow(row: LossRow): Loss {
     phone: row.phone,
     insurance: row.insurance,
     claimNumber: row.claim_number,
-    status: row.status,
+    lossType: row.loss_type as LossType,
+    dateOfLoss: row.date_of_loss,
+    status: row.status as LossStatus,
     createdAt: row.created_at,
   };
 }
@@ -48,7 +54,9 @@ export async function createLoss(input: CreateLossInput): Promise<Loss> {
         phone: input.phone,
         insurance: input.insurance,
         claim_number: input.claimNumber,
-        status: input.status ?? "Initializing",
+        loss_type: input.lossType,
+        date_of_loss: input.dateOfLoss,
+        status: input.status ?? "New",
       })
       .select("*")
       .single()
@@ -71,6 +79,7 @@ export async function getLoss(id: string): Promise<Loss | null> {
 /** @deprecated Prefer getLoss — kept for existing callers. */
 export const getLossById = getLoss;
 
+/** Fetch all losses, newest first (created_at). */
 export async function listLosses(): Promise<Loss[]> {
   const supabase = getSupabaseClient();
 
@@ -84,6 +93,9 @@ export async function listLosses(): Promise<Loss[]> {
   return (data ?? []).map(mapLossRow);
 }
 
+/** Alias for listLosses — used by the Jobs home list. */
+export const getLosses = listLosses;
+
 export async function updateLoss(
   id: string,
   input: UpdateLossInput
@@ -96,6 +108,8 @@ export async function updateLoss(
   if (input.phone !== undefined) update.phone = input.phone;
   if (input.insurance !== undefined) update.insurance = input.insurance;
   if (input.claimNumber !== undefined) update.claim_number = input.claimNumber;
+  if (input.lossType !== undefined) update.loss_type = input.lossType;
+  if (input.dateOfLoss !== undefined) update.date_of_loss = input.dateOfLoss;
   if (input.status !== undefined) update.status = input.status;
 
   const data = unwrapSingle(
@@ -108,6 +122,14 @@ export async function updateLoss(
   );
 
   return mapLossRow(data);
+}
+
+/** Persist a loss status change. */
+export async function updateLossStatus(
+  id: string,
+  status: LossStatus
+): Promise<Loss> {
+  return updateLoss(id, { status });
 }
 
 export async function deleteLoss(id: string): Promise<void> {

@@ -6,6 +6,8 @@ export type {
   Database,
   EquipmentRow,
   LossRow,
+  LossStatus,
+  LossType,
   MoistureReadingRow,
   PhotoRow,
   RoomNoteRow,

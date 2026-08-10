@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { Header } from "@/components/layout/Header";
+import {
+  LOSS_STATUSES,
+  type LossStatus,
+} from "@/lib/domain/Loss";
 import { useTwinStore } from "@/lib/store/useTwinStore";
 import { buildLossActivity } from "@/lib/utils/buildLossActivity";
 
@@ -18,6 +22,19 @@ function formatActivityTime(value: string): string {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+  });
+}
+
+function formatDateOfLoss(value: string): string {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
@@ -38,8 +55,14 @@ export default function DashboardPage() {
     (state) => state.loadLossRoomDetails
   );
   const addRoom = useTwinStore((state) => state.addRoom);
+  const updateLossStatus = useTwinStore((state) => state.updateLossStatus);
+  const clearLossError = useTwinStore((state) => state.clearLossError);
   const activeLoss = useTwinStore((state) => state.activeLoss);
   const activeLossId = useTwinStore((state) => state.activeLossId);
+  const isUpdatingLossStatus = useTwinStore(
+    (state) => state.isUpdatingLossStatus
+  );
+  const lossError = useTwinStore((state) => state.lossError);
   const rooms = useTwinStore((state) => state.rooms);
   const photosByRoomId = useTwinStore((state) => state.photosByRoomId);
   const moistureByRoomId = useTwinStore((state) => state.moistureByRoomId);
@@ -86,6 +109,23 @@ export default function DashboardPage() {
   const phone = activeLoss?.phone?.trim() || "";
   const insurance = activeLoss?.insurance?.trim() || "—";
   const claimNumber = activeLoss?.claimNumber?.trim() || "—";
+  const lossType = activeLoss?.lossType ?? "Other";
+  const dateOfLoss = activeLoss?.dateOfLoss ?? "";
+  const lossStatus = activeLoss?.status ?? "New";
+
+  async function handleStatusChange(nextStatus: LossStatus) {
+    if (isUpdatingLossStatus || nextStatus === lossStatus) {
+      return;
+    }
+
+    clearLossError();
+
+    try {
+      await updateLossStatus(nextStatus);
+    } catch {
+      // lossError is set in the store
+    }
+  }
 
   function openAddRoom() {
     setAddError(null);
@@ -123,6 +163,13 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen bg-slate-950 p-6 text-white md:p-8">
       <div className="mx-auto max-w-6xl">
+        <Link
+          href="/"
+          className="mb-6 inline-block text-blue-400 hover:text-blue-300"
+        >
+          ← Jobs
+        </Link>
+
         <Header
           title="Dashboard"
           subtitle={activeLossId ? "Current loss" : "No active loss"}
@@ -131,14 +178,22 @@ export default function DashboardPage() {
         {!activeLossId ? (
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
             <p className="text-slate-400">
-              Start a new loss to open the job command center.
+              Select a job from the list, or start a new loss.
             </p>
-            <Link
-              href="/new-loss"
-              className="mt-6 inline-block rounded-lg bg-blue-600 px-5 py-3 font-medium hover:bg-blue-500"
-            >
-              New Loss
-            </Link>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link
+                href="/"
+                className="inline-block rounded-lg border border-slate-600 px-5 py-3 font-medium hover:bg-slate-800"
+              >
+                ← Jobs
+              </Link>
+              <Link
+                href="/new-loss"
+                className="inline-block rounded-lg bg-blue-600 px-5 py-3 font-medium hover:bg-blue-500"
+              >
+                + New Loss
+              </Link>
+            </div>
           </div>
         ) : (
           <div className="grid gap-6">
@@ -149,30 +204,84 @@ export default function DashboardPage() {
             ) : null}
 
             <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-              <h2 className="text-3xl font-bold tracking-tight">{address}</h2>
-              <div className="mt-4 grid gap-2 text-slate-300 sm:grid-cols-2">
-                <p>
-                  <span className="text-slate-500">Customer: </span>
-                  {customer}
-                </p>
-                <p>
-                  <span className="text-slate-500">Phone: </span>
-                  {phone || "—"}
-                </p>
-                <p>
-                  <span className="text-slate-500">Insurance: </span>
-                  {insurance}
-                </p>
-                <p>
-                  <span className="text-slate-500">Claim #: </span>
-                  {claimNumber}
-                </p>
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-400">
+                    {lossType} Loss
+                  </p>
+                  <h2 className="mt-3 text-3xl font-bold tracking-tight">
+                    {address}
+                  </h2>
+                  <p className="mt-2 text-xl text-slate-200">{customer}</p>
+
+                  <div className="mt-6 grid gap-3 text-slate-300 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-500">
+                        Date of Loss
+                      </p>
+                      <p className="mt-1">
+                        {dateOfLoss ? formatDateOfLoss(dateOfLoss) : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-500">
+                        Phone
+                      </p>
+                      <p className="mt-1">{phone || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-500">
+                        Insurance
+                      </p>
+                      <p className="mt-1">{insurance}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-500">
+                        Claim
+                      </p>
+                      <p className="mt-1">{claimNumber}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="w-full shrink-0 rounded-lg border border-slate-700 bg-slate-950/50 p-4 lg:w-64">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">
+                    Status
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-yellow-400">
+                    {lossStatus}
+                  </p>
+                  <label
+                    htmlFor="loss-status"
+                    className="mt-4 mb-1 block text-sm text-slate-300"
+                  >
+                    Update status
+                  </label>
+                  <select
+                    id="loss-status"
+                    value={lossStatus}
+                    disabled={isUpdatingLossStatus}
+                    onChange={(event) =>
+                      void handleStatusChange(
+                        event.target.value as LossStatus
+                      )
+                    }
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:border-blue-500 disabled:opacity-60"
+                  >
+                    {LOSS_STATUSES.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                  {isUpdatingLossStatus ? (
+                    <p className="mt-2 text-xs text-slate-500">Saving...</p>
+                  ) : null}
+                  {lossError ? (
+                    <p className="mt-2 text-xs text-red-300">{lossError}</p>
+                  ) : null}
+                </div>
               </div>
-              {activeLoss?.status ? (
-                <p className="mt-4 text-sm text-yellow-400">
-                  Status: {activeLoss.status}
-                </p>
-              ) : null}
             </section>
 
             <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">

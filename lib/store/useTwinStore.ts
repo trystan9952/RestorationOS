@@ -9,11 +9,13 @@ import {
   deleteRoom as removePersistedRoom,
   getEquipment,
   getLoss,
+  getLosses,
   getMoistureReadings,
   getPhotos,
   getRoomNotes,
   getRooms,
   updateEquipmentStatus as persistEquipmentStatus,
+  updateLossStatus as persistLossStatus,
   updateRoom as persistRoomUpdate,
   uploadRoomPhoto,
   type CreateLossInput,
@@ -22,7 +24,7 @@ import {
 } from "@/lib/database";
 import { getErrorMessage } from "@/lib/database/errors";
 import type { Equipment, EquipmentStatus } from "@/lib/domain/Equipment";
-import type { Loss } from "@/lib/domain/Loss";
+import type { Loss, LossStatus } from "@/lib/domain/Loss";
 import type { MoistureReading } from "@/lib/domain/MoistureReading";
 import type { Photo } from "@/lib/domain/Photo";
 import type { Room } from "@/lib/domain/Room";
@@ -63,6 +65,13 @@ type TwinState = {
 
   activeLossId: string | null;
   activeLoss: Loss | null;
+  isUpdatingLossStatus: boolean;
+  lossError: string | null;
+
+  /** Frontend cache of all losses for the Jobs home list. */
+  losses: Loss[];
+  lossesStatus: AsyncStatus;
+  lossesError: string | null;
 
   status: AsyncStatus;
   error: string | null;
@@ -122,6 +131,18 @@ type TwinState = {
 
   setActiveLossId: (lossId: string | null) => void;
   clearError: () => void;
+  clearLossError: () => void;
+  clearLossesError: () => void;
+  updateLossStatus: (status: LossStatus) => Promise<Loss>;
+
+  /** Load all losses from Supabase for the Jobs list. */
+  loadLosses: () => Promise<Loss[]>;
+
+  /**
+   * Set the active loss (localStorage + store), clear prior job room caches,
+   * and load that loss for the Dashboard.
+   */
+  openLoss: (lossId: string) => Promise<Loss | null>;
 
   createLossRemote: (input: CreateLossInput) => Promise<Loss>;
   loadLoss: (lossId: string) => Promise<Loss | null>;
@@ -169,12 +190,17 @@ async function ensureActiveLossId(
     return existing;
   }
 
+  const today = new Date().toISOString().slice(0, 10);
+
   const loss = await createLoss({
     address: "Pending address",
     customer: "Pending customer",
     phone: "",
     insurance: "",
     claimNumber: "",
+    lossType: "Other",
+    dateOfLoss: today,
+    status: "New",
   });
 
   writeStoredLossId(loss.id);
@@ -213,6 +239,12 @@ export const useTwinStore = create<TwinState>((set, get) => ({
 
   activeLossId: null,
   activeLoss: null,
+  isUpdatingLossStatus: false,
+  lossError: null,
+
+  losses: [],
+  lossesStatus: "idle",
+  lossesError: null,
 
   status: "idle",
   error: null,
@@ -227,6 +259,10 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   },
 
   clearError: () => set({ error: null, status: "idle" }),
+
+  clearLossError: () => set({ lossError: null }),
+
+  clearLossesError: () => set({ lossesError: null, lossesStatus: "idle" }),
 
   clearPhotoError: () => set({ photoError: null, photoStatus: "idle" }),
 
@@ -656,12 +692,67 @@ export const useTwinStore = create<TwinState>((set, get) => ({
       });
     }),
 
+  loadLosses: async () => {
+    set({ lossesStatus: "loading", lossesError: null });
+
+    try {
+      const losses = await getLosses();
+
+      set({
+        losses,
+        lossesStatus: "idle",
+        lossesError: null,
+      });
+
+      return losses;
+    } catch (error) {
+      set({
+        lossesStatus: "error",
+        lossesError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  openLoss: async (lossId) => {
+    writeStoredLossId(lossId);
+
+    set({
+      activeLossId: lossId,
+      rooms: [],
+      photosByRoomId: {},
+      moistureByRoomId: {},
+      notesByRoomId: {},
+      equipmentByRoomId: {},
+      lossError: null,
+      error: null,
+    });
+
+    try {
+      const loss = await getLoss(lossId);
+
+      set({
+        activeLossId: loss?.id ?? lossId,
+        activeLoss: loss,
+        address: loss?.address ?? "",
+        customer: loss?.customer ?? "",
+      });
+
+      return loss;
+    } catch (error) {
+      set({
+        lossError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
   createLossRemote: async (input) =>
     runAsyncAction(set, async () => {
       const loss = await createLoss(input);
 
       writeStoredLossId(loss.id);
-      set({
+      set((state) => ({
         activeLossId: loss.id,
         activeLoss: loss,
         address: loss.address,
@@ -671,11 +762,58 @@ export const useTwinStore = create<TwinState>((set, get) => ({
         moistureByRoomId: {},
         notesByRoomId: {},
         equipmentByRoomId: {},
+        losses: [
+          loss,
+          ...state.losses.filter((existing) => existing.id !== loss.id),
+        ],
+        lossError: null,
         status: "idle",
-      });
+      }));
 
       return loss;
     }),
+
+  updateLossStatus: async (nextStatus) => {
+    if (get().isUpdatingLossStatus) {
+      throw new Error("Loss status is already being updated");
+    }
+
+    const lossId = get().activeLossId ?? readStoredLossId();
+    if (!lossId) {
+      const message = "No active loss to update.";
+      set({ lossError: message });
+      throw new Error(message);
+    }
+
+    set({
+      isUpdatingLossStatus: true,
+      lossError: null,
+    });
+
+    try {
+      const loss = await persistLossStatus(lossId, nextStatus);
+
+      set((state) => ({
+        activeLossId: loss.id,
+        activeLoss: loss,
+        address: loss.address,
+        customer: loss.customer,
+        losses: state.losses.map((existing) =>
+          existing.id === loss.id ? loss : existing
+        ),
+        isUpdatingLossStatus: false,
+        lossError: null,
+      }));
+
+      return loss;
+    } catch (error) {
+      set({
+        isUpdatingLossStatus: false,
+        lossError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
 
   loadLoss: async (lossId) =>
     runAsyncAction(set, async () => {

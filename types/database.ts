@@ -6,6 +6,7 @@
  * - supabase/migrations/20260810010000_create_moisture_readings.sql
  * - supabase/migrations/20260810020000_create_room_notes.sql
  * - supabase/migrations/20260810030000_create_equipment.sql
+ * - supabase/migrations/20260810040000_add_loss_details_fields.sql
  *
  * TODO: Future Digital Twin will organize photos by Building → Floor → Room → Wall.
  */
@@ -18,9 +19,12 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
+export type LossType = "Water" | "Fire" | "Mold" | "Other";
+
 export type LossStatus =
-  | "Initializing"
+  | "New"
   | "Inspection"
+  | "Mitigation"
   | "Drying"
   | "Complete";
 
@@ -35,6 +39,8 @@ export type Database = {
           phone: string;
           insurance: string;
           claim_number: string;
+          loss_type: LossType;
+          date_of_loss: string;
           status: LossStatus;
           created_at: string;
         };
@@ -45,6 +51,8 @@ export type Database = {
           phone?: string;
           insurance?: string;
           claim_number?: string;
+          loss_type: LossType;
+          date_of_loss: string;
           status?: LossStatus;
           created_at?: string;
         };
@@ -55,6 +63,8 @@ export type Database = {
           phone?: string;
           insurance?: string;
           claim_number?: string;
+          loss_type?: LossType;
+          date_of_loss?: string;
           status?: LossStatus;
           created_at?: string;
         };

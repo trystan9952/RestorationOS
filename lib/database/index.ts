@@ -34,8 +34,10 @@ export {
   deleteLoss,
   getLoss,
   getLossById,
+  getLosses,
   listLosses,
   updateLoss,
+  updateLossStatus,
   type CreateLossInput,
   type UpdateLossInput,
 } from "@/lib/database/lossRepository";
