@@ -13,6 +13,7 @@ export type {
   LossType,
   MoistureReadingRow,
   PhotoRow,
+  PriceCatalogItemRow,
   RoomMeasurementRow,
   RoomNoteRow,
   RoomRow,

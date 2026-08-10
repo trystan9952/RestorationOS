@@ -218,6 +218,12 @@ export default function DashboardPage() {
                 >
                   Estimate
                 </Link>
+                <Link
+                  href="/price-catalog"
+                  className="rounded-lg border border-slate-600 px-3 py-1.5 text-sm hover:bg-slate-800"
+                >
+                  Price Catalog
+                </Link>
                 <button
                   type="button"
                   onClick={() => {

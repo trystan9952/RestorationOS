@@ -135,12 +135,20 @@ export default function Home() {
             </p>
           </div>
 
-          <Link
-            href="/new-loss"
-            className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold hover:bg-blue-500"
-          >
-            + New Loss
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/price-catalog"
+              className="inline-flex items-center justify-center rounded-lg border border-slate-600 px-5 py-3 text-sm font-semibold hover:bg-slate-800"
+            >
+              Price Catalog
+            </Link>
+            <Link
+              href="/new-loss"
+              className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold hover:bg-blue-500"
+            >
+              + New Loss
+            </Link>
+          </div>
         </header>
 
         {isLoading ? (

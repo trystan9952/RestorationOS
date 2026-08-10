@@ -11,6 +11,7 @@
  * - supabase/migrations/20260810060000_create_estimate_foundation.sql
  * - supabase/migrations/20260810070000_create_room_measurements.sql
  * - supabase/migrations/20260810080000_add_quantity_source_to_estimate_line_items.sql
+ * - supabase/migrations/20260810090000_create_price_catalog.sql
  *
  * TODO: Future Digital Twin will organize photos by Building → Floor → Room → Wall.
  */
@@ -482,6 +483,45 @@ export type Database = {
           },
         ];
       };
+      price_catalog_items: {
+        Row: {
+          id: string;
+          category: string;
+          name: string;
+          description: string | null;
+          unit: string;
+          unit_price: number;
+          active: boolean;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          category: string;
+          name: string;
+          description?: string | null;
+          unit: string;
+          unit_price?: number;
+          active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          category?: string;
+          name?: string;
+          description?: string | null;
+          unit?: string;
+          unit_price?: number;
+          active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       room_measurements: {
         Row: {
           id: string;
@@ -554,5 +594,7 @@ export type EstimateLineItemRow =
   Database["public"]["Tables"]["estimate_line_items"]["Row"];
 export type RoomMeasurementRow =
   Database["public"]["Tables"]["room_measurements"]["Row"];
+export type PriceCatalogItemRow =
+  Database["public"]["Tables"]["price_catalog_items"]["Row"];
 
 export const ROOM_PHOTOS_BUCKET = "room-photos" as const;

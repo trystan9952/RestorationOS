@@ -9,6 +9,7 @@ import {
   createMoistureReading,
   createRoom,
   createRoomNote,
+  createPriceCatalogItem as persistCreatePriceCatalogItem,
   createRoomMeasurement,
   createScopeItem,
   deleteEstimateArea as removePersistedEstimateArea,
@@ -24,10 +25,12 @@ import {
   getLosses,
   getMoistureReadings,
   getPhotos,
+  getPriceCatalogItems,
   getRoomMeasurement,
   getRoomNotes,
   getRooms,
   getScopeItems,
+  setPriceCatalogItemActive as persistSetPriceCatalogItemActive,
   updateEquipmentStatus as persistEquipmentStatus,
   updateEstimateArea as persistEstimateAreaUpdate,
   updateEstimateLineItem as persistEstimateLineItemUpdate,
@@ -35,6 +38,7 @@ import {
   updateLoss as persistLossUpdate,
   updateLossStatus as persistLossStatus,
   deleteLoss as removePersistedLoss,
+  updatePriceCatalogItem as persistUpdatePriceCatalogItem,
   updateRoom as persistRoomUpdate,
   updateRoomMeasurement as persistRoomMeasurementUpdate,
   updateScopeItem as persistScopeItemUpdate,
@@ -53,6 +57,7 @@ import type { EstimateQuantitySource } from "@/lib/domain/EstimateQuantitySource
 import type { Loss, LossStatus } from "@/lib/domain/Loss";
 import type { MoistureReading } from "@/lib/domain/MoistureReading";
 import type { Photo } from "@/lib/domain/Photo";
+import type { PriceCatalogItem } from "@/lib/domain/PriceCatalogItem";
 import type { Room } from "@/lib/domain/Room";
 import type { RoomMeasurement } from "@/lib/domain/RoomMeasurement";
 import type { RoomNote } from "@/lib/domain/RoomNote";
@@ -118,6 +123,15 @@ type TwinState = {
   isUpdatingEstimate: boolean;
   isDeletingEstimateArea: boolean;
   isDeletingEstimateLineItem: boolean;
+
+  /**
+   * Global company price catalog (not tied to active loss).
+   * Do not clear when switching jobs.
+   */
+  priceCatalogItems: PriceCatalogItem[];
+  priceCatalogStatus: AsyncStatus;
+  priceCatalogError: string | null;
+  isSavingPriceCatalog: boolean;
 
   activeLossId: string | null;
   activeLoss: Loss | null;
@@ -248,6 +262,33 @@ type TwinState = {
     status: EstimateStatus
   ) => Promise<Estimate>;
   clearEstimateError: () => void;
+
+  loadPriceCatalog: () => Promise<PriceCatalogItem[]>;
+  createPriceCatalogItem: (input: {
+    category: string;
+    name: string;
+    description?: string | null;
+    unit: string;
+    unitPrice: number;
+    active?: boolean;
+  }) => Promise<PriceCatalogItem>;
+  updatePriceCatalogItem: (
+    id: string,
+    input: {
+      category: string;
+      name: string;
+      description?: string | null;
+      unit: string;
+      unitPrice: number;
+      active: boolean;
+    }
+  ) => Promise<PriceCatalogItem>;
+  setPriceCatalogItemActive: (
+    id: string,
+    active: boolean
+  ) => Promise<PriceCatalogItem>;
+  deletePriceCatalogItem: (id: string) => Promise<void>;
+  clearPriceCatalogError: () => void;
 
   setActiveLossId: (lossId: string | null) => void;
   clearError: () => void;
@@ -390,6 +431,11 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   isDeletingEstimateArea: false,
   isDeletingEstimateLineItem: false,
 
+  priceCatalogItems: [],
+  priceCatalogStatus: "idle",
+  priceCatalogError: null,
+  isSavingPriceCatalog: false,
+
   activeLossId: null,
   activeLoss: null,
   isUpdatingLossStatus: false,
@@ -433,6 +479,9 @@ export const useTwinStore = create<TwinState>((set, get) => ({
 
   clearEstimateError: () =>
     set({ estimateError: null, estimateStatus: "idle" }),
+
+  clearPriceCatalogError: () =>
+    set({ priceCatalogError: null, priceCatalogStatus: "idle" }),
 
   hydrateFromDatabase: async () =>
     runAsyncAction(set, async () => {
@@ -1599,6 +1648,177 @@ export const useTwinStore = create<TwinState>((set, get) => ({
       set({
         isUpdatingEstimate: false,
         estimateError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  loadPriceCatalog: async () => {
+    set({ priceCatalogStatus: "loading", priceCatalogError: null });
+
+    try {
+      const items = await getPriceCatalogItems();
+
+      set({
+        priceCatalogItems: items,
+        priceCatalogStatus: "idle",
+        priceCatalogError: null,
+      });
+
+      return items;
+    } catch (error) {
+      set({
+        priceCatalogStatus: "error",
+        priceCatalogError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  createPriceCatalogItem: async (input) => {
+    if (get().isSavingPriceCatalog) {
+      throw new Error("A catalog item is already being saved");
+    }
+
+    set({
+      isSavingPriceCatalog: true,
+      priceCatalogError: null,
+    });
+
+    try {
+      const created = await persistCreatePriceCatalogItem({
+        category: input.category,
+        name: input.name,
+        description: input.description,
+        unit: input.unit,
+        unitPrice: input.unitPrice,
+        active: input.active ?? true,
+      });
+
+      const items = await getPriceCatalogItems();
+
+      set({
+        priceCatalogItems: items,
+        isSavingPriceCatalog: false,
+        priceCatalogError: null,
+        priceCatalogStatus: "idle",
+      });
+
+      return items.find((item) => item.id === created.id) ?? created;
+    } catch (error) {
+      set({
+        isSavingPriceCatalog: false,
+        priceCatalogError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  updatePriceCatalogItem: async (id, input) => {
+    if (get().isSavingPriceCatalog) {
+      throw new Error("A catalog item is already being saved");
+    }
+
+    set({
+      isSavingPriceCatalog: true,
+      priceCatalogError: null,
+    });
+
+    try {
+      await persistUpdatePriceCatalogItem(id, {
+        category: input.category,
+        name: input.name,
+        description: input.description,
+        unit: input.unit,
+        unitPrice: input.unitPrice,
+        active: input.active,
+      });
+
+      const items = await getPriceCatalogItems();
+
+      set({
+        priceCatalogItems: items,
+        isSavingPriceCatalog: false,
+        priceCatalogError: null,
+        priceCatalogStatus: "idle",
+      });
+
+      const updated = items.find((item) => item.id === id);
+      if (!updated) {
+        throw new Error("Catalog item was updated but could not be reloaded");
+      }
+
+      return updated;
+    } catch (error) {
+      set({
+        isSavingPriceCatalog: false,
+        priceCatalogError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  setPriceCatalogItemActive: async (id, active) => {
+    if (get().isSavingPriceCatalog) {
+      throw new Error("A catalog item is already being saved");
+    }
+
+    set({
+      isSavingPriceCatalog: true,
+      priceCatalogError: null,
+    });
+
+    try {
+      await persistSetPriceCatalogItemActive(id, active);
+      const items = await getPriceCatalogItems();
+
+      set({
+        priceCatalogItems: items,
+        isSavingPriceCatalog: false,
+        priceCatalogError: null,
+        priceCatalogStatus: "idle",
+      });
+
+      const updated = items.find((item) => item.id === id);
+      if (!updated) {
+        throw new Error("Catalog item was updated but could not be reloaded");
+      }
+
+      return updated;
+    } catch (error) {
+      set({
+        isSavingPriceCatalog: false,
+        priceCatalogError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  deletePriceCatalogItem: async (id) => {
+    if (get().isSavingPriceCatalog) {
+      throw new Error("A catalog item is already being saved");
+    }
+
+    set({
+      isSavingPriceCatalog: true,
+      priceCatalogError: null,
+    });
+
+    try {
+      // Prefer soft-delete: deactivate rather than hard delete.
+      await persistSetPriceCatalogItemActive(id, false);
+      const items = await getPriceCatalogItems();
+
+      set({
+        priceCatalogItems: items,
+        isSavingPriceCatalog: false,
+        priceCatalogError: null,
+        priceCatalogStatus: "idle",
+      });
+    } catch (error) {
+      set({
+        isSavingPriceCatalog: false,
+        priceCatalogError: getErrorMessage(error),
       });
       throw error;
     }

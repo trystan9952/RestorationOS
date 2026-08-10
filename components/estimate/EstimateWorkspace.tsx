@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { CatalogItemPicker } from "@/components/estimate/CatalogItemPicker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,6 +27,7 @@ import {
   type EstimateQuantitySource,
 } from "@/lib/domain/EstimateQuantitySource";
 import type { Loss } from "@/lib/domain/Loss";
+import type { PriceCatalogItem } from "@/lib/domain/PriceCatalogItem";
 import type { Room } from "@/lib/domain/Room";
 import type { RoomMeasurement } from "@/lib/domain/RoomMeasurement";
 import { useTwinStore } from "@/lib/store/useTwinStore";
@@ -176,6 +178,7 @@ export function EstimateWorkspace({
   );
   const [deleteLineItemTarget, setDeleteLineItemTarget] =
     useState<EstimateLineItem | null>(null);
+  const [isCatalogPickerOpen, setIsCatalogPickerOpen] = useState(false);
 
   const availableRooms = useMemo(() => {
     const linkedRoomIds = new Set(
@@ -438,6 +441,20 @@ export function EstimateWorkspace({
         unit: value,
       };
     });
+  }
+
+  /**
+   * Snapshot catalog values into the form.
+   * Does NOT change quantity_source (measurement/manual remains).
+   */
+  function handleSelectCatalogItem(item: PriceCatalogItem) {
+    setLineItemForm((current) => ({
+      ...current,
+      description: item.name,
+      unit: item.unit,
+      unitPrice: String(item.unitPrice),
+    }));
+    setLineItemFormError(null);
   }
 
   async function handleSaveLineItem() {
@@ -1045,12 +1062,23 @@ export function EstimateWorkspace({
               {editingLineItem ? "Edit Line Item" : "Add Line Item"}
             </DialogTitle>
             <DialogDescription className="text-slate-400">
-              Choose a quantity source from room measurements, or enter
-              quantity manually. Editing quantity or unit switches the source
-              to Manual.
+              Use the catalog for description/unit/price, and quantity source
+              for quantity. Editing quantity or unit switches the source to
+              Manual.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm text-slate-300">Line item details</span>
+              <button
+                type="button"
+                onClick={() => setIsCatalogPickerOpen(true)}
+                className="rounded-lg border border-slate-600 px-3 py-1.5 text-sm hover:bg-slate-800"
+              >
+                Add from Catalog
+              </button>
+            </div>
+
             <label className="block text-sm">
               <span className="mb-1 block text-slate-300">Description</span>
               <input
@@ -1199,6 +1227,12 @@ export function EstimateWorkspace({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CatalogItemPicker
+        open={isCatalogPickerOpen}
+        onOpenChange={setIsCatalogPickerOpen}
+        onSelect={handleSelectCatalogItem}
+      />
 
       <Dialog
         open={deleteLineItemTarget !== null}
