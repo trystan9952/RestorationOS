@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 
 import { RoomEquipment } from "@/components/equipment/Equipment";
 import { Header } from "@/components/layout/Header";
+import { RoomMeasurements } from "@/components/measurements/RoomMeasurements";
 import { MoistureReadings } from "@/components/moisture/MoistureReadings";
 import { RoomNotes } from "@/components/notes/RoomNotes";
 import { PhotoUploader } from "@/components/photos/PhotoUploader";
@@ -15,7 +16,8 @@ import { useTwinStore } from "@/lib/store/useTwinStore";
 
 export default function RoomPage() {
   const params = useParams<{ ID: string }>();
-  const roomId = params.ID;
+  const rawRoomId = params?.ID;
+  const roomId = Array.isArray(rawRoomId) ? rawRoomId[0] : rawRoomId;
 
   const hydrateFromDatabase = useTwinStore((state) => state.hydrateFromDatabase);
   const loadRoomPhotos = useTwinStore((state) => state.loadRoomPhotos);
@@ -25,27 +27,35 @@ export default function RoomPage() {
   const loadRoomNotes = useTwinStore((state) => state.loadRoomNotes);
   const loadRoomEquipment = useTwinStore((state) => state.loadRoomEquipment);
   const loadRoomScope = useTwinStore((state) => state.loadRoomScope);
+  const loadRoomMeasurement = useTwinStore(
+    (state) => state.loadRoomMeasurement
+  );
   const room = useTwinStore((state) =>
-    state.rooms.find((item) => item.id === roomId)
+    roomId ? state.rooms.find((item) => item.id === roomId) : undefined
   );
 
   useEffect(() => {
     void (async () => {
       await hydrateFromDatabase();
-      if (roomId) {
-        await Promise.all([
-          loadRoomPhotos(roomId),
-          loadMoistureReadings(roomId),
-          loadRoomNotes(roomId),
-          loadRoomEquipment(roomId),
-          loadRoomScope(roomId),
-        ]);
+      if (!roomId) {
+        return;
       }
+
+      // allSettled so one failed load cannot block the rest of the room UI
+      await Promise.allSettled([
+        loadRoomPhotos(roomId),
+        loadMoistureReadings(roomId),
+        loadRoomNotes(roomId),
+        loadRoomEquipment(roomId),
+        loadRoomScope(roomId),
+        loadRoomMeasurement(roomId),
+      ]);
     })();
   }, [
     hydrateFromDatabase,
     loadMoistureReadings,
     loadRoomEquipment,
+    loadRoomMeasurement,
     loadRoomNotes,
     loadRoomPhotos,
     loadRoomScope,
@@ -62,7 +72,7 @@ export default function RoomPage() {
       <div className="mx-auto max-w-6xl">
         <Header title={title} subtitle={subtitle} />
 
-        {room ? (
+        {room && roomId ? (
           <div className="grid gap-6">
             <RoomTimeline roomId={roomId} />
 
@@ -83,6 +93,10 @@ export default function RoomPage() {
               <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
                 <RoomNotes roomId={roomId} />
               </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
+              <RoomMeasurements roomId={roomId} />
             </div>
 
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">

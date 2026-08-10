@@ -5,6 +5,7 @@ export { LOSS_STATUSES, LOSS_TYPES } from "@/lib/domain/Loss";
 export type { MoistureReading } from "@/lib/domain/MoistureReading";
 export type { Photo } from "@/lib/domain/Photo";
 export type { Room, RoomCategory, RoomClass } from "@/lib/domain/Room";
+export type { RoomMeasurement } from "@/lib/domain/RoomMeasurement";
 export type { RoomNote } from "@/lib/domain/RoomNote";
 export type { ScopeItem } from "@/lib/domain/ScopeItem";
 export type {

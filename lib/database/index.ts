@@ -108,3 +108,12 @@ export {
   type UpdateEstimateAreaInput,
   type UpdateEstimateLineItemInput,
 } from "@/lib/database/estimateRepository";
+
+export {
+  createRoomMeasurement,
+  deleteRoomMeasurement,
+  getRoomMeasurement,
+  updateRoomMeasurement,
+  type CreateRoomMeasurementInput,
+  type UpdateRoomMeasurementInput,
+} from "@/lib/database/roomMeasurementRepository";

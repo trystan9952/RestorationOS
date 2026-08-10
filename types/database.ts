@@ -9,6 +9,7 @@
  * - supabase/migrations/20260810040000_add_loss_details_fields.sql
  * - supabase/migrations/20260810050000_create_room_scope_items.sql
  * - supabase/migrations/20260810060000_create_estimate_foundation.sql
+ * - supabase/migrations/20260810070000_create_room_measurements.sql
  *
  * TODO: Future Digital Twin will organize photos by Building → Floor → Room → Wall.
  */
@@ -462,6 +463,54 @@ export type Database = {
           },
         ];
       };
+      room_measurements: {
+        Row: {
+          id: string;
+          loss_id: string;
+          room_id: string;
+          length_ft: number;
+          width_ft: number;
+          ceiling_height_ft: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          loss_id: string;
+          room_id: string;
+          length_ft: number;
+          width_ft: number;
+          ceiling_height_ft: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          loss_id?: string;
+          room_id?: string;
+          length_ft?: number;
+          width_ft?: number;
+          ceiling_height_ft?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "room_measurements_loss_id_fkey";
+            columns: ["loss_id"];
+            isOneToOne: false;
+            referencedRelation: "losses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "room_measurements_room_id_fkey";
+            columns: ["room_id"];
+            isOneToOne: true;
+            referencedRelation: "rooms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -484,5 +533,7 @@ export type EstimateAreaRow =
   Database["public"]["Tables"]["estimate_areas"]["Row"];
 export type EstimateLineItemRow =
   Database["public"]["Tables"]["estimate_line_items"]["Row"];
+export type RoomMeasurementRow =
+  Database["public"]["Tables"]["room_measurements"]["Row"];
 
 export const ROOM_PHOTOS_BUCKET = "room-photos" as const;

@@ -9,10 +9,12 @@ import {
   createMoistureReading,
   createRoom,
   createRoomNote,
+  createRoomMeasurement,
   createScopeItem,
   deleteEstimateArea as removePersistedEstimateArea,
   deleteEstimateLineItem as removePersistedEstimateLineItem,
   deleteRoom as removePersistedRoom,
+  deleteRoomMeasurement as removePersistedRoomMeasurement,
   deleteScopeItem as removePersistedScopeItem,
   getEquipment,
   getEstimateAreas,
@@ -22,6 +24,7 @@ import {
   getLosses,
   getMoistureReadings,
   getPhotos,
+  getRoomMeasurement,
   getRoomNotes,
   getRooms,
   getScopeItems,
@@ -33,6 +36,7 @@ import {
   updateLossStatus as persistLossStatus,
   deleteLoss as removePersistedLoss,
   updateRoom as persistRoomUpdate,
+  updateRoomMeasurement as persistRoomMeasurementUpdate,
   updateScopeItem as persistScopeItemUpdate,
   uploadRoomPhoto,
   type CreateLossInput,
@@ -49,6 +53,7 @@ import type { Loss, LossStatus } from "@/lib/domain/Loss";
 import type { MoistureReading } from "@/lib/domain/MoistureReading";
 import type { Photo } from "@/lib/domain/Photo";
 import type { Room } from "@/lib/domain/Room";
+import type { RoomMeasurement } from "@/lib/domain/RoomMeasurement";
 import type { RoomNote } from "@/lib/domain/RoomNote";
 import type { ScopeItem } from "@/lib/domain/ScopeItem";
 import { runAsyncAction } from "@/lib/store/async";
@@ -91,6 +96,15 @@ type TwinState = {
   isSavingScope: boolean;
   isUpdatingScope: boolean;
   isDeletingScope: boolean;
+
+  /**
+   * Frontend cache of room measurements, keyed by room id.
+   * null means loaded with no measurement; missing key means not loaded.
+   */
+  roomMeasurementsByRoomId: Record<string, RoomMeasurement | null>;
+  measurementError: string | null;
+  isSavingMeasurement: boolean;
+  isDeletingMeasurement: boolean;
 
   /** Frontend cache of estimates (one per loss in MVP). */
   estimateByLossId: Record<string, Estimate>;
@@ -177,6 +191,18 @@ type TwinState = {
   toggleScopeItem: (roomId: string, scopeItemId: string) => Promise<ScopeItem>;
   deleteScopeItem: (roomId: string, scopeItemId: string) => Promise<void>;
   clearScopeError: () => void;
+
+  loadRoomMeasurement: (roomId: string) => Promise<RoomMeasurement | null>;
+  saveRoomMeasurement: (
+    roomId: string,
+    values: {
+      lengthFt: number;
+      widthFt: number;
+      ceilingHeightFt: number;
+    }
+  ) => Promise<RoomMeasurement>;
+  deleteRoomMeasurement: (roomId: string) => Promise<void>;
+  clearMeasurementError: () => void;
 
   /**
    * Load or create the single estimate for a loss, then hydrate areas/line items.
@@ -345,6 +371,11 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   isUpdatingScope: false,
   isDeletingScope: false,
 
+  roomMeasurementsByRoomId: {},
+  measurementError: null,
+  isSavingMeasurement: false,
+  isDeletingMeasurement: false,
+
   estimateByLossId: {},
   estimateAreasByEstimateId: {},
   estimateLineItemsByAreaId: {},
@@ -394,6 +425,8 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   clearEquipmentError: () => set({ equipmentError: null }),
 
   clearScopeError: () => set({ scopeError: null }),
+
+  clearMeasurementError: () => set({ measurementError: null }),
 
   clearEstimateError: () =>
     set({ estimateError: null, estimateStatus: "idle" }),
@@ -955,6 +988,148 @@ export const useTwinStore = create<TwinState>((set, get) => ({
     }
   },
 
+  loadRoomMeasurement: async (roomId) => {
+    set({ measurementError: null });
+
+    try {
+      const measurement = await getRoomMeasurement(roomId);
+
+      set((state) => ({
+        roomMeasurementsByRoomId: {
+          ...(state.roomMeasurementsByRoomId ?? {}),
+          [roomId]: measurement,
+        },
+        measurementError: null,
+      }));
+
+      return measurement;
+    } catch (error) {
+      set({ measurementError: getErrorMessage(error) });
+      throw error;
+    }
+  },
+
+  saveRoomMeasurement: async (roomId, values) => {
+    if (get().isSavingMeasurement) {
+      throw new Error("Room measurements are already being saved");
+    }
+
+    const { lengthFt, widthFt, ceilingHeightFt } = values;
+
+    if (
+      !Number.isFinite(lengthFt) ||
+      !Number.isFinite(widthFt) ||
+      !Number.isFinite(ceilingHeightFt) ||
+      lengthFt <= 0 ||
+      widthFt <= 0 ||
+      ceilingHeightFt <= 0
+    ) {
+      const message =
+        "Length, width, and ceiling height must be numbers greater than 0.";
+      set({ measurementError: message });
+      throw new Error(message);
+    }
+
+    set({
+      isSavingMeasurement: true,
+      measurementError: null,
+    });
+
+    try {
+      const lossId = await ensureActiveLossId(get, set);
+      const cached = get().roomMeasurementsByRoomId?.[roomId];
+      const existing =
+        cached !== undefined ? cached : await getRoomMeasurement(roomId);
+
+      if (existing) {
+        await persistRoomMeasurementUpdate(existing.id, {
+          lengthFt,
+          widthFt,
+          ceilingHeightFt,
+        });
+      } else {
+        try {
+          await createRoomMeasurement({
+            lossId,
+            roomId,
+            lengthFt,
+            widthFt,
+            ceilingHeightFt,
+          });
+        } catch (error) {
+          // Unique room_id race: another create may have won — update instead.
+          const raced = await getRoomMeasurement(roomId);
+          if (!raced) {
+            throw error;
+          }
+          await persistRoomMeasurementUpdate(raced.id, {
+            lengthFt,
+            widthFt,
+            ceilingHeightFt,
+          });
+        }
+      }
+
+      const measurement = await getRoomMeasurement(roomId);
+      if (!measurement) {
+        throw new Error("Measurement was saved but could not be reloaded");
+      }
+
+      set((state) => ({
+        roomMeasurementsByRoomId: {
+          ...(state.roomMeasurementsByRoomId ?? {}),
+          [roomId]: measurement,
+        },
+        isSavingMeasurement: false,
+        measurementError: null,
+      }));
+
+      return measurement;
+    } catch (error) {
+      set({
+        isSavingMeasurement: false,
+        measurementError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  deleteRoomMeasurement: async (roomId) => {
+    if (get().isDeletingMeasurement) {
+      throw new Error("Room measurements are already being deleted");
+    }
+
+    set({
+      isDeletingMeasurement: true,
+      measurementError: null,
+    });
+
+    try {
+      const cached = get().roomMeasurementsByRoomId?.[roomId];
+      const existing =
+        cached !== undefined ? cached : await getRoomMeasurement(roomId);
+
+      if (existing) {
+        await removePersistedRoomMeasurement(existing.id);
+      }
+
+      set((state) => ({
+        roomMeasurementsByRoomId: {
+          ...(state.roomMeasurementsByRoomId ?? {}),
+          [roomId]: null,
+        },
+        isDeletingMeasurement: false,
+        measurementError: null,
+      }));
+    } catch (error) {
+      set({
+        isDeletingMeasurement: false,
+        measurementError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
   loadEstimateForLoss: async (lossId) => {
     set({ estimateStatus: "loading", estimateError: null });
 
@@ -1472,6 +1647,8 @@ export const useTwinStore = create<TwinState>((set, get) => ({
       notesByRoomId: {},
       equipmentByRoomId: {},
       scopeItemsByRoomId: {},
+      roomMeasurementsByRoomId: {},
+      measurementError: null,
       estimateByLossId: {},
       estimateAreasByEstimateId: {},
       estimateLineItemsByAreaId: {},
@@ -1516,6 +1693,8 @@ export const useTwinStore = create<TwinState>((set, get) => ({
         notesByRoomId: {},
         equipmentByRoomId: {},
         scopeItemsByRoomId: {},
+        roomMeasurementsByRoomId: {},
+        measurementError: null,
         estimateByLossId: {},
         estimateAreasByEstimateId: {},
         estimateLineItemsByAreaId: {},
@@ -1656,6 +1835,8 @@ export const useTwinStore = create<TwinState>((set, get) => ({
           notesByRoomId: {},
           equipmentByRoomId: {},
           scopeItemsByRoomId: {},
+          roomMeasurementsByRoomId: {},
+          measurementError: null,
           estimateByLossId: {},
           estimateAreasByEstimateId: {},
           estimateLineItemsByAreaId: {},
