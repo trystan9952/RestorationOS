@@ -49,6 +49,7 @@ import type { Equipment, EquipmentStatus } from "@/lib/domain/Equipment";
 import type { Estimate, EstimateStatus } from "@/lib/domain/Estimate";
 import type { EstimateArea } from "@/lib/domain/EstimateArea";
 import type { EstimateLineItem } from "@/lib/domain/EstimateLineItem";
+import type { EstimateQuantitySource } from "@/lib/domain/EstimateQuantitySource";
 import type { Loss, LossStatus } from "@/lib/domain/Loss";
 import type { MoistureReading } from "@/lib/domain/MoistureReading";
 import type { Photo } from "@/lib/domain/Photo";
@@ -228,6 +229,7 @@ type TwinState = {
     quantity: number;
     unit: string;
     unitPrice: number;
+    quantitySource: EstimateQuantitySource;
   }) => Promise<EstimateLineItem>;
   updateEstimateLineItem: (
     areaId: string,
@@ -237,6 +239,7 @@ type TwinState = {
       quantity: number;
       unit: string;
       unitPrice: number;
+      quantitySource: EstimateQuantitySource;
     }
   ) => Promise<EstimateLineItem>;
   deleteEstimateLineItem: (areaId: string, lineItemId: string) => Promise<void>;
@@ -1445,6 +1448,7 @@ export const useTwinStore = create<TwinState>((set, get) => ({
         quantity: input.quantity,
         unit,
         unitPrice: input.unitPrice,
+        quantitySource: input.quantitySource,
         sortOrder: existingItems.length,
       });
 
@@ -1508,6 +1512,7 @@ export const useTwinStore = create<TwinState>((set, get) => ({
         quantity: input.quantity,
         unit,
         unitPrice: input.unitPrice,
+        quantitySource: input.quantitySource,
       });
 
       const items = await getEstimateLineItems(areaId);

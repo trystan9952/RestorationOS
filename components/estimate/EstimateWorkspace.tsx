@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -19,15 +20,26 @@ import {
 } from "@/lib/domain/Estimate";
 import type { EstimateArea } from "@/lib/domain/EstimateArea";
 import type { EstimateLineItem } from "@/lib/domain/EstimateLineItem";
+import {
+  MEASUREMENT_QUANTITY_SOURCES,
+  formatQuantitySourceLabel,
+  type EstimateQuantitySource,
+} from "@/lib/domain/EstimateQuantitySource";
 import type { Loss } from "@/lib/domain/Loss";
 import type { Room } from "@/lib/domain/Room";
+import type { RoomMeasurement } from "@/lib/domain/RoomMeasurement";
 import { useTwinStore } from "@/lib/store/useTwinStore";
+import {
+  formatQuantitySourceOptionLabel,
+  getRoomQuantitySourceValue,
+} from "@/lib/utils/estimateQuantitySource";
 import {
   calculateAreaTotal,
   calculateEstimateTotal,
   calculateLineItemTotal,
   formatCurrency,
 } from "@/lib/utils/estimateTotals";
+import { formatQuantityDisplay } from "@/lib/utils/roomMeasurements";
 
 const EMPTY_AREAS: EstimateArea[] = [];
 const EMPTY_LINE_ITEMS: EstimateLineItem[] = [];
@@ -45,6 +57,7 @@ type LineItemFormState = {
   quantity: string;
   unit: string;
   unitPrice: string;
+  quantitySource: EstimateQuantitySource;
 };
 
 function emptyLineItemForm(): LineItemFormState {
@@ -53,6 +66,7 @@ function emptyLineItemForm(): LineItemFormState {
     quantity: "1",
     unit: "SF",
     unitPrice: "0",
+    quantitySource: "manual",
   };
 }
 
@@ -62,6 +76,34 @@ function parseMoneyInput(value: string): number | null {
     return null;
   }
   return parsed;
+}
+
+function applyQuantitySourceToForm(
+  current: LineItemFormState,
+  source: EstimateQuantitySource,
+  measurement: RoomMeasurement | null | undefined
+): LineItemFormState {
+  if (source === "manual") {
+    return {
+      ...current,
+      quantitySource: "manual",
+    };
+  }
+
+  const resolved = getRoomQuantitySourceValue(measurement, source);
+  if (!resolved) {
+    return {
+      ...current,
+      quantitySource: "manual",
+    };
+  }
+
+  return {
+    ...current,
+    quantitySource: source,
+    quantity: String(resolved.quantity),
+    unit: resolved.unit,
+  };
 }
 
 export function EstimateWorkspace({
@@ -75,6 +117,9 @@ export function EstimateWorkspace({
   const areas = areasForEstimate ?? EMPTY_AREAS;
   const lineItemsByAreaId = useTwinStore(
     (state) => state.estimateLineItemsByAreaId
+  );
+  const roomMeasurementsByRoomId = useTwinStore(
+    (state) => state.roomMeasurementsByRoomId
   );
   const estimateError = useTwinStore((state) => state.estimateError);
   const isSavingEstimateArea = useTwinStore(
@@ -152,6 +197,22 @@ export function EstimateWorkspace({
     isDeletingEstimateArea ||
     isDeletingEstimateLineItem;
 
+  const activeLineItemArea = useMemo(
+    () => areas.find((area) => area.id === lineItemAreaId) ?? null,
+    [areas, lineItemAreaId]
+  );
+
+  const activeAreaMeasurement = useMemo(() => {
+    if (!activeLineItemArea?.roomId) {
+      return null;
+    }
+    return roomMeasurementsByRoomId?.[activeLineItemArea.roomId] ?? null;
+  }, [activeLineItemArea, roomMeasurementsByRoomId]);
+
+  const activeAreaHasMeasurements = Boolean(activeAreaMeasurement);
+  const activeAreaIsRoomLinked = Boolean(activeLineItemArea?.roomId);
+  const isMeasurementSource = lineItemForm.quantitySource !== "manual";
+
   const previewLineTotal = useMemo(() => {
     const quantity = parseMoneyInput(lineItemForm.quantity);
     const unitPrice = parseMoneyInput(lineItemForm.unitPrice);
@@ -160,6 +221,15 @@ export function EstimateWorkspace({
     }
     return calculateLineItemTotal({ quantity, unitPrice });
   }, [lineItemForm.quantity, lineItemForm.unitPrice]);
+
+  function getAreaMeasurement(
+    area: EstimateArea
+  ): RoomMeasurement | null | undefined {
+    if (!area.roomId) {
+      return null;
+    }
+    return roomMeasurementsByRoomId?.[area.roomId];
+  }
 
   async function handleStatusChange(nextStatus: EstimateStatus) {
     if (isUpdatingEstimate || nextStatus === estimate.status) {
@@ -290,12 +360,27 @@ export function EstimateWorkspace({
     clearEstimateError();
     setLineItemFormError(null);
     setEditingLineItem(item);
-    setLineItemForm({
+
+    const area = areas.find((entry) => entry.id === item.estimateAreaId);
+    const measurement = area ? getAreaMeasurement(area) : null;
+    let nextForm: LineItemFormState = {
       description: item.description,
       quantity: String(item.quantity),
       unit: item.unit,
       unitPrice: String(item.unitPrice),
-    });
+      quantitySource: item.quantitySource ?? "manual",
+    };
+
+    // Recalculate from current measurements when source is measurement-based
+    if (item.quantitySource !== "manual") {
+      nextForm = applyQuantitySourceToForm(
+        nextForm,
+        item.quantitySource,
+        measurement
+      );
+    }
+
+    setLineItemForm(nextForm);
     setLineItemAreaId(item.estimateAreaId);
   }
 
@@ -306,22 +391,87 @@ export function EstimateWorkspace({
     setLineItemFormError(null);
   }
 
+  function handleQuantitySourceChange(source: EstimateQuantitySource) {
+    if (
+      source !== "manual" &&
+      (!activeAreaIsRoomLinked || !activeAreaHasMeasurements)
+    ) {
+      setLineItemFormError(
+        "Add room measurements to use calculated quantities."
+      );
+      return;
+    }
+
+    setLineItemFormError(null);
+    setLineItemForm((current) =>
+      applyQuantitySourceToForm(current, source, activeAreaMeasurement)
+    );
+  }
+
+  function handleQuantityChange(value: string) {
+    setLineItemForm((current) => {
+      if (current.quantitySource !== "manual") {
+        return {
+          ...current,
+          quantity: value,
+          quantitySource: "manual",
+        };
+      }
+      return {
+        ...current,
+        quantity: value,
+      };
+    });
+  }
+
+  function handleUnitChange(value: string) {
+    setLineItemForm((current) => {
+      if (current.quantitySource !== "manual") {
+        return {
+          ...current,
+          unit: value,
+          quantitySource: "manual",
+        };
+      }
+      return {
+        ...current,
+        unit: value,
+      };
+    });
+  }
+
   async function handleSaveLineItem() {
     if (!lineItemAreaId || isSavingEstimateLineItem) {
       return;
     }
 
     const description = lineItemForm.description.trim();
-    const unit = lineItemForm.unit.trim();
-    const quantity = parseMoneyInput(lineItemForm.quantity);
+    const quantitySource = lineItemForm.quantitySource;
+    let unit = lineItemForm.unit.trim();
+    let quantity = parseMoneyInput(lineItemForm.quantity);
     const unitPrice = parseMoneyInput(lineItemForm.unitPrice);
+
+    if (quantitySource !== "manual") {
+      const resolved = getRoomQuantitySourceValue(
+        activeAreaMeasurement,
+        quantitySource
+      );
+      if (!resolved) {
+        setLineItemFormError(
+          "Add room measurements to use calculated quantities."
+        );
+        return;
+      }
+      quantity = resolved.quantity;
+      unit = resolved.unit;
+    }
 
     if (!description) {
       setLineItemFormError("Description is required.");
       return;
     }
-    if (quantity === null) {
-      setLineItemFormError("Quantity must be a valid non-negative number.");
+    if (quantity === null || quantity <= 0) {
+      setLineItemFormError("Quantity must be a number greater than 0.");
       return;
     }
     if (!unit) {
@@ -343,6 +493,7 @@ export function EstimateWorkspace({
           quantity,
           unit,
           unitPrice,
+          quantitySource,
         });
       } else {
         await saveEstimateLineItem({
@@ -351,6 +502,7 @@ export function EstimateWorkspace({
           quantity,
           unit,
           unitPrice,
+          quantitySource,
         });
       }
       closeLineItemDialog();
@@ -476,6 +628,10 @@ export function EstimateWorkspace({
               const lineItems =
                 lineItemsByAreaId[area.id] ?? EMPTY_LINE_ITEMS;
               const areaTotal = calculateAreaTotal(lineItems);
+              const measurement = getAreaMeasurement(area);
+              const room = area.roomId
+                ? rooms.find((entry) => entry.id === area.roomId)
+                : null;
 
               return (
                 <article
@@ -492,12 +648,41 @@ export function EstimateWorkspace({
                         </span>
                       </p>
                       {area.roomId ? (
-                        <p className="mt-1 text-xs text-slate-500">
-                          Linked to room
-                        </p>
+                        <div className="mt-2 space-y-1 text-xs text-slate-500">
+                          <p>
+                            Room:{" "}
+                            <span className="text-slate-300">
+                              {room?.name ?? area.name}
+                            </span>
+                          </p>
+                          {measurement ? (
+                            <p>
+                              Measurements:{" "}
+                              <span className="text-slate-300">
+                                {formatQuantityDisplay(measurement.lengthFt)} ×{" "}
+                                {formatQuantityDisplay(measurement.widthFt)} ×{" "}
+                                {formatQuantityDisplay(
+                                  measurement.ceilingHeightFt
+                                )}{" "}
+                                ft
+                              </span>
+                            </p>
+                          ) : (
+                            <p>
+                              Measurements not available.{" "}
+                              <Link
+                                href={`/room/${area.roomId}`}
+                                className="text-blue-400 hover:text-blue-300"
+                              >
+                                Add room measurements
+                              </Link>{" "}
+                              to use calculated quantities.
+                            </p>
+                          )}
+                        </div>
                       ) : (
                         <p className="mt-1 text-xs text-slate-500">
-                          Custom area
+                          Custom area — Manual quantity only
                         </p>
                       )}
                     </div>
@@ -548,6 +733,7 @@ export function EstimateWorkspace({
                               </th>
                               <th className="py-2 pr-3 font-medium">Qty</th>
                               <th className="py-2 pr-3 font-medium">Unit</th>
+                              <th className="py-2 pr-3 font-medium">Source</th>
                               <th className="py-2 pr-3 font-medium">
                                 Unit Price
                               </th>
@@ -568,6 +754,11 @@ export function EstimateWorkspace({
                                   {item.quantity}
                                 </td>
                                 <td className="py-3 pr-3">{item.unit}</td>
+                                <td className="py-3 pr-3 text-slate-400">
+                                  {formatQuantitySourceLabel(
+                                    item.quantitySource ?? "manual"
+                                  )}
+                                </td>
                                 <td className="py-3 pr-3 tabular-nums">
                                   {formatCurrency(item.unitPrice)}
                                 </td>
@@ -614,6 +805,12 @@ export function EstimateWorkspace({
                             <p className="mt-2 text-sm text-slate-400">
                               {item.quantity} {item.unit} ×{" "}
                               {formatCurrency(item.unitPrice)}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Source:{" "}
+                              {formatQuantitySourceLabel(
+                                item.quantitySource ?? "manual"
+                              )}
                             </p>
                             <p className="mt-1 text-base font-semibold text-slate-100">
                               {formatCurrency(calculateLineItemTotal(item))}
@@ -842,14 +1039,15 @@ export function EstimateWorkspace({
           }
         }}
       >
-        <DialogContent className="border-slate-700 bg-slate-900 text-white">
+        <DialogContent className="border-slate-700 bg-slate-900 text-white sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
               {editingLineItem ? "Edit Line Item" : "Add Line Item"}
             </DialogTitle>
             <DialogDescription className="text-slate-400">
-              Enter description, quantity, unit, and unit price. Total is
-              calculated automatically.
+              Choose a quantity source from room measurements, or enter
+              quantity manually. Editing quantity or unit switches the source
+              to Manual.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
@@ -867,6 +1065,62 @@ export function EstimateWorkspace({
                 className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 outline-none focus:border-blue-500"
               />
             </label>
+
+            <label className="block text-sm">
+              <span className="mb-1 block text-slate-300">Quantity Source</span>
+              <select
+                value={lineItemForm.quantitySource}
+                onChange={(event) =>
+                  handleQuantitySourceChange(
+                    event.target.value as EstimateQuantitySource
+                  )
+                }
+                className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 outline-none focus:border-blue-500"
+              >
+                <option value="manual">Manual</option>
+                {MEASUREMENT_QUANTITY_SOURCES.map((source) => (
+                  <option
+                    key={source}
+                    value={source}
+                    disabled={
+                      !activeAreaIsRoomLinked || !activeAreaHasMeasurements
+                    }
+                  >
+                    {activeAreaHasMeasurements
+                      ? formatQuantitySourceOptionLabel(
+                          source,
+                          activeAreaMeasurement
+                        )
+                      : `${formatQuantitySourceLabel(source)} — n/a`}
+                  </option>
+                ))}
+              </select>
+              {!activeAreaIsRoomLinked ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  Custom areas support Manual quantity only.
+                </p>
+              ) : null}
+              {activeAreaIsRoomLinked && !activeAreaHasMeasurements ? (
+                <p className="mt-1 text-xs text-amber-300/90">
+                  Measurements not available.{" "}
+                  {activeLineItemArea?.roomId ? (
+                    <Link
+                      href={`/room/${activeLineItemArea.roomId}`}
+                      className="text-blue-400 hover:text-blue-300"
+                    >
+                      Add room measurements
+                    </Link>
+                  ) : null}{" "}
+                  to use calculated quantities.
+                </p>
+              ) : null}
+              {isMeasurementSource ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  Changing quantity or unit will switch this to Manual.
+                </p>
+              ) : null}
+            </label>
+
             <div className="grid gap-3 sm:grid-cols-3">
               <label className="block text-sm">
                 <span className="mb-1 block text-slate-300">Quantity</span>
@@ -875,12 +1129,7 @@ export function EstimateWorkspace({
                   min="0"
                   step="0.01"
                   value={lineItemForm.quantity}
-                  onChange={(event) =>
-                    setLineItemForm((current) => ({
-                      ...current,
-                      quantity: event.target.value,
-                    }))
-                  }
+                  onChange={(event) => handleQuantityChange(event.target.value)}
                   className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 outline-none focus:border-blue-500"
                 />
               </label>
@@ -888,12 +1137,7 @@ export function EstimateWorkspace({
                 <span className="mb-1 block text-slate-300">Unit</span>
                 <select
                   value={lineItemForm.unit}
-                  onChange={(event) =>
-                    setLineItemForm((current) => ({
-                      ...current,
-                      unit: event.target.value,
-                    }))
-                  }
+                  onChange={(event) => handleUnitChange(event.target.value)}
                   className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 outline-none focus:border-blue-500"
                 >
                   {COMMON_UNITS.map((unit) => (

@@ -24,10 +24,16 @@ export default function EstimatePage() {
   const loadEstimateForLoss = useTwinStore(
     (state) => state.loadEstimateForLoss
   );
+  const loadRoomMeasurement = useTwinStore(
+    (state) => state.loadRoomMeasurement
+  );
   const activeLoss = useTwinStore((state) => state.activeLoss);
   const activeLossId = useTwinStore((state) => state.activeLossId);
   const rooms = useTwinStore((state) => state.rooms);
   const estimateByLossId = useTwinStore((state) => state.estimateByLossId);
+  const estimateAreasByEstimateId = useTwinStore(
+    (state) => state.estimateAreasByEstimateId
+  );
   const estimateStatus = useTwinStore((state) => state.estimateStatus);
   const estimateError = useTwinStore((state) => state.estimateError);
   const status = useTwinStore((state) => state.status);
@@ -49,14 +55,71 @@ export default function EstimatePage() {
 
       try {
         await loadRooms(lossId);
-        await loadEstimateForLoss(lossId);
+        const estimate = await loadEstimateForLoss(lossId);
+        const areas =
+          useTwinStore.getState().estimateAreasByEstimateId[estimate.id] ??
+          [];
+        const roomIds = [
+          ...new Set(
+            areas
+              .map((area) => area.roomId)
+              .filter((id): id is string => Boolean(id))
+          ),
+        ];
+        await Promise.allSettled(
+          roomIds.map((roomId) => loadRoomMeasurement(roomId))
+        );
       } catch {
         // Errors are stored in Zustand
       } finally {
         setReady(true);
       }
     })();
-  }, [hydrateFromDatabase, loadEstimateForLoss, loadRooms, router]);
+  }, [
+    hydrateFromDatabase,
+    loadEstimateForLoss,
+    loadRoomMeasurement,
+    loadRooms,
+    router,
+  ]);
+
+  // Keep measurement cache warm when areas change after initial load
+  useEffect(() => {
+    const lossId = activeLossId ?? readStoredLossId();
+    if (!lossId) {
+      return;
+    }
+
+    const estimate = estimateByLossId[lossId];
+    if (!estimate) {
+      return;
+    }
+
+    const areas = estimateAreasByEstimateId[estimate.id] ?? [];
+    const roomIds = [
+      ...new Set(
+        areas
+          .map((area) => area.roomId)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ];
+
+    void Promise.allSettled(
+      roomIds.map((roomId) => {
+        const cached =
+          useTwinStore.getState().roomMeasurementsByRoomId?.[roomId];
+        if (cached !== undefined) {
+          return Promise.resolve(cached);
+        }
+        return loadRoomMeasurement(roomId);
+      })
+    );
+  }, [
+    activeLossId,
+    estimateAreasByEstimateId,
+    estimateByLossId,
+    loadRoomMeasurement,
+  ]);
 
   const lossId = activeLossId ?? readStoredLossId();
   const estimate = lossId ? estimateByLossId[lossId] : undefined;

@@ -10,6 +10,7 @@
  * - supabase/migrations/20260810050000_create_room_scope_items.sql
  * - supabase/migrations/20260810060000_create_estimate_foundation.sql
  * - supabase/migrations/20260810070000_create_room_measurements.sql
+ * - supabase/migrations/20260810080000_add_quantity_source_to_estimate_line_items.sql
  *
  * TODO: Future Digital Twin will organize photos by Building → Floor → Room → Wall.
  */
@@ -427,6 +428,12 @@ export type Database = {
           quantity: number;
           unit: string;
           unit_price: number;
+          quantity_source:
+            | "manual"
+            | "floor_area"
+            | "ceiling_area"
+            | "wall_area"
+            | "perimeter";
           sort_order: number;
           created_at: string;
           updated_at: string;
@@ -438,6 +445,12 @@ export type Database = {
           quantity?: number;
           unit: string;
           unit_price?: number;
+          quantity_source?:
+            | "manual"
+            | "floor_area"
+            | "ceiling_area"
+            | "wall_area"
+            | "perimeter";
           sort_order?: number;
           created_at?: string;
           updated_at?: string;
@@ -449,6 +462,12 @@ export type Database = {
           quantity?: number;
           unit?: string;
           unit_price?: number;
+          quantity_source?:
+            | "manual"
+            | "floor_area"
+            | "ceiling_area"
+            | "wall_area"
+            | "perimeter";
           sort_order?: number;
           created_at?: string;
           updated_at?: string;

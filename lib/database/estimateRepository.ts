@@ -2,6 +2,10 @@ import { unwrapQuery, unwrapSingle } from "@/lib/database/errors";
 import type { Estimate, EstimateStatus } from "@/lib/domain/Estimate";
 import type { EstimateArea } from "@/lib/domain/EstimateArea";
 import type { EstimateLineItem } from "@/lib/domain/EstimateLineItem";
+import {
+  isEstimateQuantitySource,
+  type EstimateQuantitySource,
+} from "@/lib/domain/EstimateQuantitySource";
 import { getSupabaseClient } from "@/lib/supabase";
 import type {
   EstimateAreaRow,
@@ -35,6 +39,7 @@ export type CreateEstimateLineItemInput = {
   quantity: number;
   unit: string;
   unitPrice: number;
+  quantitySource?: EstimateQuantitySource;
   sortOrder?: number;
 };
 
@@ -43,6 +48,7 @@ export type UpdateEstimateLineItemInput = {
   quantity?: number;
   unit?: string;
   unitPrice?: number;
+  quantitySource?: EstimateQuantitySource;
   sortOrder?: number;
 };
 
@@ -68,6 +74,15 @@ function mapEstimateAreaRow(row: EstimateAreaRow): EstimateArea {
   };
 }
 
+function mapQuantitySource(
+  value: string | null | undefined
+): EstimateQuantitySource {
+  if (value && isEstimateQuantitySource(value)) {
+    return value;
+  }
+  return "manual";
+}
+
 function mapEstimateLineItemRow(row: EstimateLineItemRow): EstimateLineItem {
   return {
     id: row.id,
@@ -76,6 +91,7 @@ function mapEstimateLineItemRow(row: EstimateLineItemRow): EstimateLineItem {
     quantity: Number(row.quantity),
     unit: row.unit,
     unitPrice: Number(row.unit_price),
+    quantitySource: mapQuantitySource(row.quantity_source),
     sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -223,6 +239,7 @@ export async function createEstimateLineItem(
         quantity: input.quantity,
         unit: input.unit.trim(),
         unit_price: input.unitPrice,
+        quantity_source: input.quantitySource ?? "manual",
         sort_order: input.sortOrder ?? 0,
       })
       .select("*")
@@ -260,6 +277,7 @@ export async function updateEstimateLineItem(
     quantity?: number;
     unit?: string;
     unit_price?: number;
+    quantity_source?: EstimateQuantitySource;
     sort_order?: number;
     updated_at: string;
   } = {
@@ -272,6 +290,9 @@ export async function updateEstimateLineItem(
   if (input.quantity !== undefined) update.quantity = input.quantity;
   if (input.unit !== undefined) update.unit = input.unit.trim();
   if (input.unitPrice !== undefined) update.unit_price = input.unitPrice;
+  if (input.quantitySource !== undefined) {
+    update.quantity_source = input.quantitySource;
+  }
   if (input.sortOrder !== undefined) update.sort_order = input.sortOrder;
 
   const data = unwrapSingle(
