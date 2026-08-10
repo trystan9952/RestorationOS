@@ -65,6 +65,7 @@ export function CatalogItemPicker({
       }
 
       const haystack = [
+        item.code ?? "",
         item.name,
         item.description ?? "",
         item.category,
@@ -103,7 +104,7 @@ export function CatalogItemPicker({
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="drywall"
+              placeholder="code, drywall..."
               className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 outline-none focus:border-blue-500"
             />
           </label>
@@ -155,16 +156,21 @@ export function CatalogItemPicker({
                       }}
                       className="flex w-full flex-col gap-1 px-3 py-3 text-left hover:bg-slate-800/80"
                     >
+                      {item.code ? (
+                        <span className="font-mono text-xs text-slate-500">
+                          {item.code}
+                        </span>
+                      ) : null}
                       <span className="font-medium text-slate-100">
                         {item.name}
                       </span>
-                      {item.description ? (
+                      {item.description && item.description !== item.name ? (
                         <span className="text-xs text-slate-500">
                           {item.description}
                         </span>
                       ) : null}
                       <span className="text-sm text-slate-400">
-                        {item.unit} · {formatCurrency(item.unitPrice)}
+                        {item.unit} — {formatCurrency(item.unitPrice)}
                       </span>
                     </button>
                   </li>

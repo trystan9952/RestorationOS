@@ -11,6 +11,8 @@
 export interface PriceCatalogItem {
   id: string;
   category: string;
+  /** Optional source catalog code (e.g. WTRINS). Null for legacy items. */
+  code: string | null;
   name: string;
   description: string | null;
   unit: string;

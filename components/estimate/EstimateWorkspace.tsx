@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { CatalogItemPicker } from "@/components/estimate/CatalogItemPicker";
 import { EstimateDocumentPreview } from "@/components/estimate/EstimateDocumentPreview";
+import { ScopeEstimateBuilder } from "@/components/estimate/ScopeEstimateBuilder";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -199,6 +200,7 @@ export function EstimateWorkspace({
   const [deleteLineItemTarget, setDeleteLineItemTarget] =
     useState<EstimateLineItem | null>(null);
   const [isCatalogPickerOpen, setIsCatalogPickerOpen] = useState(false);
+  const [isScopeBuilderOpen, setIsScopeBuilderOpen] = useState(false);
 
   useEffect(() => {
     setNotesDraft(estimateNotes ?? "");
@@ -739,6 +741,14 @@ export function EstimateWorkspace({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-2xl font-bold">Estimate Areas</h2>
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setIsScopeBuilderOpen(true)}
+              disabled={isBusy || rooms.length === 0}
+              className="rounded-lg border border-emerald-800 px-3 py-1.5 text-sm font-medium text-emerald-300 hover:bg-emerald-950/40 disabled:opacity-60"
+            >
+              Add Items From Scope
+            </button>
             <button
               type="button"
               onClick={openAddRoom}
@@ -1396,6 +1406,13 @@ export function EstimateWorkspace({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ScopeEstimateBuilder
+        open={isScopeBuilderOpen}
+        onOpenChange={setIsScopeBuilderOpen}
+        rooms={rooms}
+        lossId={loss.id}
+      />
         </>
       )}
     </div>

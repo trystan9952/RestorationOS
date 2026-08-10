@@ -114,6 +114,7 @@ type TwinState = {
   isUpdatingScope: boolean;
   isDeletingScope: boolean;
   isAddingScopeToEstimate: boolean;
+  isBuildingEstimateFromScope: boolean;
 
   /**
    * Frontend cache of room measurements, keyed by room id.
@@ -239,6 +240,26 @@ type TwinState = {
     /** Required when quantitySource is manual. */
     manualQuantity?: number;
   }) => Promise<EstimateLineItem>;
+  /**
+   * Persist approved Scope Estimate Builder suggestions.
+   * Processes sequentially; reports per-item failures without faking a transaction.
+   */
+  addApprovedScopeItemsToEstimate: (
+    items: Array<{
+      scopeItemId: string;
+      roomId: string;
+      catalogItem: Pick<PriceCatalogItem, "name" | "unit" | "unitPrice">;
+      quantitySource: EstimateQuantitySource;
+      manualQuantity?: number;
+    }>
+  ) => Promise<{
+    added: number;
+    failures: Array<{
+      scopeItemId: string;
+      roomId: string;
+      error: string;
+    }>;
+  }>;
   clearScopeError: () => void;
 
   loadRoomMeasurement: (roomId: string) => Promise<RoomMeasurement | null>;
@@ -304,21 +325,25 @@ type TwinState = {
   loadPriceCatalog: () => Promise<PriceCatalogItem[]>;
   createPriceCatalogItem: (input: {
     category: string;
+    code?: string | null;
     name: string;
     description?: string | null;
     unit: string;
     unitPrice: number;
     active?: boolean;
+    sortOrder?: number;
   }) => Promise<PriceCatalogItem>;
   updatePriceCatalogItem: (
     id: string,
     input: {
-      category: string;
-      name: string;
+      category?: string;
+      code?: string | null;
+      name?: string;
       description?: string | null;
-      unit: string;
-      unitPrice: number;
-      active: boolean;
+      unit?: string;
+      unitPrice?: number;
+      active?: boolean;
+      sortOrder?: number;
     }
   ) => Promise<PriceCatalogItem>;
   setPriceCatalogItemActive: (
@@ -326,6 +351,38 @@ type TwinState = {
     active: boolean
   ) => Promise<PriceCatalogItem>;
   deletePriceCatalogItem: (id: string) => Promise<void>;
+  /**
+   * Apply confirmed price-book import operations sequentially.
+   * Reports partial success honestly.
+   */
+  importPriceBookOperations: (
+    operations: Array<
+      | {
+          type: "add";
+          category: string;
+          code: string;
+          name: string;
+          description: string;
+          unit: string;
+          unitPrice: number;
+          sortOrder: number;
+        }
+      | {
+          type: "update";
+          id: string;
+          category: string;
+          code: string;
+          name: string;
+          description: string;
+          unit: string;
+          unitPrice: number;
+        }
+    >
+  ) => Promise<{
+    added: number;
+    updated: number;
+    failures: Array<{ label: string; error: string }>;
+  }>;
   clearPriceCatalogError: () => void;
 
   loadCompanyProfile: () => Promise<CompanyProfile>;
@@ -430,6 +487,141 @@ async function ensureActiveLossId(
   return loss.id;
 }
 
+type ScopeToEstimateInput = {
+  scopeItemId: string;
+  roomId: string;
+  catalogItem: Pick<PriceCatalogItem, "name" | "unit" | "unitPrice">;
+  quantitySource: EstimateQuantitySource;
+  manualQuantity?: number;
+};
+
+type TwinGet = () => TwinState;
+type TwinSet = (
+  partial: Partial<TwinState> | ((state: TwinState) => Partial<TwinState>)
+) => void;
+
+/**
+ * Shared persistence path for single and bulk scope → estimate conversion.
+ * Caller owns busy flags and top-level error handling.
+ */
+async function persistSingleScopeToEstimate(
+  get: TwinGet,
+  set: TwinSet,
+  input: ScopeToEstimateInput
+): Promise<EstimateLineItem> {
+  const scopeItems =
+    get().scopeItemsByRoomId[input.roomId] ??
+    (await getScopeItems(input.roomId));
+  const scopeItem = scopeItems.find((item) => item.id === input.scopeItemId);
+
+  if (!scopeItem) {
+    throw new Error("Scope item not found.");
+  }
+  if (scopeItem.estimateLineItemId) {
+    throw new Error("This scope item is already on the estimate.");
+  }
+
+  const lossId = scopeItem.lossId;
+  const estimate = await get().loadEstimateForLoss(lossId);
+
+  let areas =
+    get().estimateAreasByEstimateId[estimate.id] ??
+    (await getEstimateAreas(estimate.id));
+  let area = areas.find((entry) => entry.roomId === input.roomId) ?? null;
+
+  if (!area) {
+    const room = get().rooms.find((entry) => entry.id === input.roomId) ?? null;
+    area = await get().saveEstimateArea({
+      estimateId: estimate.id,
+      name: room?.name?.trim() || "Room",
+      roomId: input.roomId,
+    });
+    areas =
+      get().estimateAreasByEstimateId[estimate.id] ??
+      (await getEstimateAreas(estimate.id));
+    area = areas.find((entry) => entry.id === area!.id) ?? area;
+  }
+
+  let quantity: number;
+  let unit: string;
+
+  if (input.quantitySource === "manual") {
+    const manualQuantity = input.manualQuantity;
+    if (
+      manualQuantity === undefined ||
+      !Number.isFinite(manualQuantity) ||
+      manualQuantity <= 0
+    ) {
+      throw new Error("Quantity must be a number greater than 0.");
+    }
+    quantity = manualQuantity;
+    unit = input.catalogItem.unit.trim();
+  } else {
+    const measurement =
+      get().roomMeasurementsByRoomId?.[input.roomId] ??
+      (await getRoomMeasurement(input.roomId));
+
+    if (measurement) {
+      set((state) => ({
+        roomMeasurementsByRoomId: {
+          ...(state.roomMeasurementsByRoomId ?? {}),
+          [input.roomId]: measurement,
+        },
+      }));
+    }
+
+    const resolved = getRoomQuantitySourceValue(
+      measurement,
+      input.quantitySource
+    );
+    if (!resolved) {
+      throw new Error("Add room measurements to use calculated quantities.");
+    }
+    quantity = resolved.quantity;
+    unit = resolved.unit;
+  }
+
+  if (!unit) {
+    throw new Error("Unit is required.");
+  }
+
+  const existingItems =
+    get().estimateLineItemsByAreaId[area.id] ??
+    (await getEstimateLineItems(area.id));
+
+  const lineItem = await createEstimateLineItem({
+    estimateAreaId: area.id,
+    description: input.catalogItem.name.trim(),
+    quantity,
+    unit,
+    unitPrice: input.catalogItem.unitPrice,
+    quantitySource: input.quantitySource,
+    sortOrder: existingItems.length,
+  });
+
+  await updateScopeEstimateLink(input.scopeItemId, lineItem.id);
+
+  const [refreshedScope, refreshedLineItems] = await Promise.all([
+    getScopeItems(input.roomId),
+    getEstimateLineItems(area.id),
+  ]);
+
+  set((state) => ({
+    scopeItemsByRoomId: {
+      ...state.scopeItemsByRoomId,
+      [input.roomId]: refreshedScope,
+    },
+    estimateLineItemsByAreaId: {
+      ...state.estimateLineItemsByAreaId,
+      [area.id]: refreshedLineItems,
+    },
+  }));
+
+  return (
+    refreshedLineItems.find((item) => item.id === lineItem.id) ?? lineItem
+  );
+}
+
 export const useTwinStore = create<TwinState>((set, get) => ({
   address: "",
   customer: "",
@@ -459,6 +651,7 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   isUpdatingScope: false,
   isDeletingScope: false,
   isAddingScopeToEstimate: false,
+  isBuildingEstimateFromScope: false,
 
   roomMeasurementsByRoomId: {},
   measurementError: null,
@@ -1095,7 +1288,7 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   },
 
   addScopeItemToEstimate: async (input) => {
-    if (get().isAddingScopeToEstimate) {
+    if (get().isAddingScopeToEstimate || get().isBuildingEstimateFromScope) {
       throw new Error("A scope item is already being added to the estimate");
     }
 
@@ -1106,121 +1299,14 @@ export const useTwinStore = create<TwinState>((set, get) => ({
     });
 
     try {
-      const scopeItems =
-        get().scopeItemsByRoomId[input.roomId] ??
-        (await getScopeItems(input.roomId));
-      const scopeItem = scopeItems.find((item) => item.id === input.scopeItemId);
-
-      if (!scopeItem) {
-        throw new Error("Scope item not found.");
-      }
-      if (scopeItem.estimateLineItemId) {
-        throw new Error("This scope item is already on the estimate.");
-      }
-
-      const lossId = scopeItem.lossId;
-      const estimate = await get().loadEstimateForLoss(lossId);
-
-      let areas =
-        get().estimateAreasByEstimateId[estimate.id] ??
-        (await getEstimateAreas(estimate.id));
-      let area = areas.find((entry) => entry.roomId === input.roomId) ?? null;
-
-      if (!area) {
-        const room =
-          get().rooms.find((entry) => entry.id === input.roomId) ?? null;
-        area = await get().saveEstimateArea({
-          estimateId: estimate.id,
-          name: room?.name?.trim() || "Room",
-          roomId: input.roomId,
-        });
-        areas =
-          get().estimateAreasByEstimateId[estimate.id] ??
-          (await getEstimateAreas(estimate.id));
-        area = areas.find((entry) => entry.id === area!.id) ?? area;
-      }
-
-      let quantity: number;
-      let unit: string;
-
-      if (input.quantitySource === "manual") {
-        const manualQuantity = input.manualQuantity;
-        if (
-          manualQuantity === undefined ||
-          !Number.isFinite(manualQuantity) ||
-          manualQuantity <= 0
-        ) {
-          throw new Error("Quantity must be a number greater than 0.");
-        }
-        quantity = manualQuantity;
-        unit = input.catalogItem.unit.trim();
-      } else {
-        const measurement =
-          get().roomMeasurementsByRoomId?.[input.roomId] ??
-          (await getRoomMeasurement(input.roomId));
-
-        if (measurement) {
-          set((state) => ({
-            roomMeasurementsByRoomId: {
-              ...(state.roomMeasurementsByRoomId ?? {}),
-              [input.roomId]: measurement,
-            },
-          }));
-        }
-
-        const resolved = getRoomQuantitySourceValue(
-          measurement,
-          input.quantitySource
-        );
-        if (!resolved) {
-          throw new Error(
-            "Add room measurements to use calculated quantities."
-          );
-        }
-        quantity = resolved.quantity;
-        unit = resolved.unit;
-      }
-
-      const existingItems =
-        get().estimateLineItemsByAreaId[area.id] ??
-        (await getEstimateLineItems(area.id));
-
-      const lineItem = await createEstimateLineItem({
-        estimateAreaId: area.id,
-        description: input.catalogItem.name.trim(),
-        quantity,
-        unit,
-        unitPrice: input.catalogItem.unitPrice,
-        quantitySource: input.quantitySource,
-        sortOrder: existingItems.length,
-      });
-
-      await updateScopeEstimateLink(input.scopeItemId, lineItem.id);
-
-      const [refreshedScope, refreshedLineItems] = await Promise.all([
-        getScopeItems(input.roomId),
-        getEstimateLineItems(area.id),
-      ]);
-
-      set((state) => ({
-        scopeItemsByRoomId: {
-          ...state.scopeItemsByRoomId,
-          [input.roomId]: refreshedScope,
-        },
-        estimateLineItemsByAreaId: {
-          ...state.estimateLineItemsByAreaId,
-          [area.id]: refreshedLineItems,
-        },
+      const lineItem = await persistSingleScopeToEstimate(get, set, input);
+      set({
         isAddingScopeToEstimate: false,
         scopeError: null,
         estimateError: null,
-      }));
-
-      return (
-        refreshedLineItems.find((item) => item.id === lineItem.id) ?? lineItem
-      );
+      });
+      return lineItem;
     } catch (error) {
-      // Reload estimate/scope so UI matches the database after a partial failure.
       try {
         const lossId =
           get().activeLossId ??
@@ -1237,6 +1323,75 @@ export const useTwinStore = create<TwinState>((set, get) => ({
 
       set({
         isAddingScopeToEstimate: false,
+        scopeError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  addApprovedScopeItemsToEstimate: async (items) => {
+    if (get().isAddingScopeToEstimate || get().isBuildingEstimateFromScope) {
+      throw new Error("Scope items are already being added to the estimate");
+    }
+
+    if (items.length === 0) {
+      return { added: 0, failures: [] };
+    }
+
+    set({
+      isBuildingEstimateFromScope: true,
+      scopeError: null,
+      estimateError: null,
+    });
+
+    let added = 0;
+    const failures: Array<{
+      scopeItemId: string;
+      roomId: string;
+      error: string;
+    }> = [];
+
+    try {
+      for (const item of items) {
+        try {
+          await persistSingleScopeToEstimate(get, set, item);
+          added += 1;
+        } catch (error) {
+          failures.push({
+            scopeItemId: item.scopeItemId,
+            roomId: item.roomId,
+            error: getErrorMessage(error),
+          });
+        }
+      }
+
+      const lossId = get().activeLossId;
+      if (lossId) {
+        try {
+          await get().loadEstimateForLoss(lossId);
+        } catch {
+          // Keep partial results
+        }
+      }
+
+      const roomIds = [...new Set(items.map((item) => item.roomId))];
+      await Promise.allSettled(
+        roomIds.map((roomId) => get().loadRoomScope(roomId))
+      );
+
+      set({
+        isBuildingEstimateFromScope: false,
+        scopeError:
+          failures.length > 0
+            ? `Added ${added} item(s); ${failures.length} failed.`
+            : null,
+        estimateError: null,
+      });
+
+      return { added, failures };
+    } catch (error) {
+      set({
+        isBuildingEstimateFromScope: false,
         scopeError: getErrorMessage(error),
       });
       throw error;
@@ -1954,11 +2109,13 @@ export const useTwinStore = create<TwinState>((set, get) => ({
     try {
       const created = await persistCreatePriceCatalogItem({
         category: input.category,
+        code: input.code,
         name: input.name,
         description: input.description,
         unit: input.unit,
         unitPrice: input.unitPrice,
         active: input.active ?? true,
+        sortOrder: input.sortOrder,
       });
 
       const items = await getPriceCatalogItems();
@@ -1993,11 +2150,13 @@ export const useTwinStore = create<TwinState>((set, get) => ({
     try {
       await persistUpdatePriceCatalogItem(id, {
         category: input.category,
+        code: input.code,
         name: input.name,
         description: input.description,
         unit: input.unit,
         unitPrice: input.unitPrice,
         active: input.active,
+        sortOrder: input.sortOrder,
       });
 
       const items = await getPriceCatalogItems();
@@ -2015,6 +2174,76 @@ export const useTwinStore = create<TwinState>((set, get) => ({
       }
 
       return updated;
+    } catch (error) {
+      set({
+        isSavingPriceCatalog: false,
+        priceCatalogError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  importPriceBookOperations: async (operations) => {
+    if (get().isSavingPriceCatalog) {
+      throw new Error("A catalog item is already being saved");
+    }
+
+    set({
+      isSavingPriceCatalog: true,
+      priceCatalogError: null,
+    });
+
+    let added = 0;
+    let updated = 0;
+    const failures: Array<{ label: string; error: string }> = [];
+
+    try {
+      for (const operation of operations) {
+        const label =
+          operation.type === "add"
+            ? `${operation.code} ${operation.name}`
+            : `${operation.code} ${operation.name}`;
+        try {
+          if (operation.type === "add") {
+            await persistCreatePriceCatalogItem({
+              category: operation.category,
+              code: operation.code,
+              name: operation.name,
+              description: operation.description,
+              unit: operation.unit,
+              unitPrice: operation.unitPrice,
+              active: true,
+              sortOrder: operation.sortOrder,
+            });
+            added += 1;
+          } else {
+            await persistUpdatePriceCatalogItem(operation.id, {
+              category: operation.category,
+              code: operation.code,
+              name: operation.name,
+              description: operation.description,
+              unit: operation.unit,
+              unitPrice: operation.unitPrice,
+            });
+            updated += 1;
+          }
+        } catch (error) {
+          failures.push({ label, error: getErrorMessage(error) });
+        }
+      }
+
+      const items = await getPriceCatalogItems();
+      set({
+        priceCatalogItems: items,
+        isSavingPriceCatalog: false,
+        priceCatalogError:
+          failures.length > 0
+            ? `Imported with ${failures.length} failure(s).`
+            : null,
+        priceCatalogStatus: "idle",
+      });
+
+      return { added, updated, failures };
     } catch (error) {
       set({
         isSavingPriceCatalog: false,

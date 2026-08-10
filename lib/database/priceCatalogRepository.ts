@@ -12,6 +12,7 @@ import type { PriceCatalogItemRow } from "@/types/database";
 
 export type CreatePriceCatalogItemInput = {
   category: string;
+  code?: string | null;
   name: string;
   description?: string | null;
   unit: string;
@@ -22,6 +23,7 @@ export type CreatePriceCatalogItemInput = {
 
 export type UpdatePriceCatalogItemInput = {
   category?: string;
+  code?: string | null;
   name?: string;
   description?: string | null;
   unit?: string;
@@ -42,6 +44,7 @@ function mapPriceCatalogItemRow(row: PriceCatalogItemRow): PriceCatalogItem {
   return {
     id: row.id,
     category: row.category,
+    code: row.code?.trim() ? row.code : null,
     name: row.name,
     description: row.description,
     unit: row.unit,
@@ -107,6 +110,7 @@ export async function createPriceCatalogItem(
   const name = assertNonBlank("Name", input.name);
   const unit = assertNonBlank("Unit", input.unit);
   const description = input.description?.trim() || null;
+  const code = input.code?.trim() || null;
 
   if (!Number.isFinite(input.unitPrice) || input.unitPrice < 0) {
     throw new Error("Unit price must be a number greater than or equal to 0.");
@@ -119,6 +123,7 @@ export async function createPriceCatalogItem(
       .from("price_catalog_items")
       .insert({
         category,
+        code,
         name,
         description,
         unit,
@@ -141,6 +146,7 @@ export async function updatePriceCatalogItem(
 
   const update: {
     category?: string;
+    code?: string | null;
     name?: string;
     description?: string | null;
     unit?: string;
@@ -154,6 +160,9 @@ export async function updatePriceCatalogItem(
 
   if (input.category !== undefined) {
     update.category = assertNonBlank("Category", input.category);
+  }
+  if (input.code !== undefined) {
+    update.code = input.code?.trim() || null;
   }
   if (input.name !== undefined) {
     update.name = assertNonBlank("Name", input.name);

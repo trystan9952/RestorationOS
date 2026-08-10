@@ -15,6 +15,7 @@
  * - supabase/migrations/20260810100000_add_estimate_line_item_id_to_room_scope_items.sql
  * - supabase/migrations/20260810110000_add_estimate_notes.sql
  * - supabase/migrations/20260810120000_create_company_profile.sql
+ * - supabase/migrations/20260810130000_add_price_catalog_code.sql
  *
  * TODO: Future Digital Twin will organize photos by Building → Floor → Room → Wall.
  */
@@ -542,6 +543,7 @@ export type Database = {
         Row: {
           id: string;
           category: string;
+          code: string | null;
           name: string;
           description: string | null;
           unit: string;
@@ -554,6 +556,7 @@ export type Database = {
         Insert: {
           id?: string;
           category: string;
+          code?: string | null;
           name: string;
           description?: string | null;
           unit: string;
@@ -566,6 +569,7 @@ export type Database = {
         Update: {
           id?: string;
           category?: string;
+          code?: string | null;
           name?: string;
           description?: string | null;
           unit?: string;

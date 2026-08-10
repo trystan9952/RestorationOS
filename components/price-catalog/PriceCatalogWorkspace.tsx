@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -16,10 +17,20 @@ import type { PriceCatalogItem } from "@/lib/domain/PriceCatalogItem";
 import { useTwinStore } from "@/lib/store/useTwinStore";
 import { formatCurrency } from "@/lib/utils/estimateTotals";
 
-const CATALOG_UNITS = ["SF", "LF", "EA", "HR", "DAY", "LS"] as const;
+const CATALOG_UNITS = [
+  "SF",
+  "LF",
+  "EA",
+  "HR",
+  "DAY",
+  "LS",
+  "PAIR",
+  "SAMPLE",
+] as const;
 
 type CatalogFormState = {
   category: string;
+  code: string;
   name: string;
   description: string;
   unit: string;
@@ -30,6 +41,7 @@ type CatalogFormState = {
 function emptyForm(): CatalogFormState {
   return {
     category: "",
+    code: "",
     name: "",
     description: "",
     unit: "SF",
@@ -41,6 +53,7 @@ function emptyForm(): CatalogFormState {
 function formFromItem(item: PriceCatalogItem): CatalogFormState {
   return {
     category: item.category,
+    code: item.code ?? "",
     name: item.name,
     description: item.description ?? "",
     unit: item.unit,
@@ -98,6 +111,7 @@ export function PriceCatalogWorkspace() {
       }
 
       const haystack = [
+        item.code ?? "",
         item.name,
         item.description ?? "",
         item.category,
@@ -148,6 +162,7 @@ export function PriceCatalogWorkspace() {
     }
 
     const category = form.category.trim();
+    const code = form.code.trim();
     const name = form.name.trim();
     const unit = form.unit.trim();
     const description = form.description.trim();
@@ -169,6 +184,7 @@ export function PriceCatalogWorkspace() {
       if (editingItem) {
         await updatePriceCatalogItem(editingItem.id, {
           category,
+          code: code || null,
           name,
           description: description || null,
           unit,
@@ -178,6 +194,7 @@ export function PriceCatalogWorkspace() {
       } else {
         await createPriceCatalogItem({
           category,
+          code: code || null,
           name,
           description: description || null,
           unit,
@@ -216,14 +233,22 @@ export function PriceCatalogWorkspace() {
               snapshot prices when selected.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={openCreate}
-            disabled={isSavingPriceCatalog}
-            className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium hover:bg-blue-500 disabled:opacity-60"
-          >
-            + Add Item
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/price-catalog/import"
+              className="rounded-lg border border-slate-600 px-3 py-1.5 text-sm font-medium hover:bg-slate-800"
+            >
+              Import Price Book
+            </Link>
+            <button
+              type="button"
+              onClick={openCreate}
+              disabled={isSavingPriceCatalog}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium hover:bg-blue-500 disabled:opacity-60"
+            >
+              + Add Item
+            </button>
+          </div>
         </div>
 
         <div className="mt-6 grid gap-3 md:grid-cols-[1fr_220px_auto]">
@@ -232,7 +257,7 @@ export function PriceCatalogWorkspace() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="drywall"
+              placeholder="code, drywall, category..."
               className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 outline-none focus:border-blue-500"
             />
           </label>
@@ -299,6 +324,7 @@ export function PriceCatalogWorkspace() {
                 <table className="w-full min-w-[640px] text-left text-sm">
                   <thead className="border-b border-slate-700 text-slate-400">
                     <tr>
+                      <th className="py-2 pr-3 font-medium">Code</th>
                       <th className="py-2 pr-3 font-medium">Name</th>
                       <th className="py-2 pr-3 font-medium">Unit</th>
                       <th className="py-2 pr-3 font-medium">Unit Price</th>
@@ -312,9 +338,13 @@ export function PriceCatalogWorkspace() {
                         key={item.id}
                         className="border-b border-slate-800/80"
                       >
+                        <td className="py-3 pr-3 font-mono text-xs text-slate-400">
+                          {item.code || "—"}
+                        </td>
                         <td className="py-3 pr-3">
                           <p className="text-slate-100">{item.name}</p>
-                          {item.description ? (
+                          {item.description &&
+                          item.description !== item.name ? (
                             <p className="mt-1 text-xs text-slate-500">
                               {item.description}
                             </p>
@@ -367,8 +397,13 @@ export function PriceCatalogWorkspace() {
                     key={item.id}
                     className="rounded-lg border border-slate-800 bg-slate-950/50 p-3"
                   >
+                    {item.code ? (
+                      <p className="font-mono text-xs text-slate-500">
+                        {item.code}
+                      </p>
+                    ) : null}
                     <p className="font-medium text-slate-100">{item.name}</p>
-                    {item.description ? (
+                    {item.description && item.description !== item.name ? (
                       <p className="mt-1 text-sm text-slate-500">
                         {item.description}
                       </p>
@@ -444,6 +479,24 @@ export function PriceCatalogWorkspace() {
                   <option key={category} value={category} />
                 ))}
               </datalist>
+            </label>
+
+            <label className="block text-sm">
+              <span className="mb-1 block text-slate-300">
+                Code{" "}
+                <span className="font-normal text-slate-500">(optional)</span>
+              </span>
+              <input
+                value={form.code}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    code: event.target.value,
+                  }))
+                }
+                placeholder="WTRINS"
+                className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 font-mono outline-none focus:border-blue-500"
+              />
             </label>
 
             <label className="block text-sm">
