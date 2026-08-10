@@ -4,6 +4,7 @@ export type AsyncStatus = "idle" | "loading" | "error";
 
 export type {
   Database,
+  EquipmentRow,
   LossRow,
   MoistureReadingRow,
   PhotoRow,

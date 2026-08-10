@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
+import { RoomEquipment } from "@/components/equipment/Equipment";
 import { Header } from "@/components/layout/Header";
 import { MoistureReadings } from "@/components/moisture/MoistureReadings";
 import { RoomNotes } from "@/components/notes/RoomNotes";
@@ -20,6 +21,7 @@ export default function RoomPage() {
     (state) => state.loadMoistureReadings
   );
   const loadRoomNotes = useTwinStore((state) => state.loadRoomNotes);
+  const loadRoomEquipment = useTwinStore((state) => state.loadRoomEquipment);
   const room = useTwinStore((state) =>
     state.rooms.find((item) => item.id === roomId)
   );
@@ -32,12 +34,14 @@ export default function RoomPage() {
           loadRoomPhotos(roomId),
           loadMoistureReadings(roomId),
           loadRoomNotes(roomId),
+          loadRoomEquipment(roomId),
         ]);
       }
     })();
   }, [
     hydrateFromDatabase,
     loadMoistureReadings,
+    loadRoomEquipment,
     loadRoomNotes,
     loadRoomPhotos,
     roomId,
@@ -66,8 +70,7 @@ export default function RoomPage() {
               </div>
 
               <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-                <h2 className="text-xl font-bold">📦 Equipment</h2>
-                <p className="mt-4 text-slate-400">No equipment added.</p>
+                <RoomEquipment roomId={roomId} />
               </div>
 
               <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">

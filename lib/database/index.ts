@@ -23,7 +23,9 @@ export {
 export {
   createEquipment,
   deleteEquipment,
+  getEquipment,
   listEquipmentByRoomId,
+  updateEquipmentStatus,
   type CreateEquipmentInput,
 } from "@/lib/database/equipmentRepository";
 

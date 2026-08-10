@@ -1,16 +1,19 @@
 import { create } from "zustand";
 
 import {
+  createEquipment,
   createLoss,
   createMoistureReading,
   createRoom,
   createRoomNote,
   deleteRoom as removePersistedRoom,
+  getEquipment,
   getLoss,
   getMoistureReadings,
   getPhotos,
   getRoomNotes,
   getRooms,
+  updateEquipmentStatus as persistEquipmentStatus,
   updateRoom as persistRoomUpdate,
   uploadRoomPhoto,
   type CreateLossInput,
@@ -18,6 +21,7 @@ import {
   type UpdateRoomInput,
 } from "@/lib/database";
 import { getErrorMessage } from "@/lib/database/errors";
+import type { Equipment, EquipmentStatus } from "@/lib/domain/Equipment";
 import type { Loss } from "@/lib/domain/Loss";
 import type { MoistureReading } from "@/lib/domain/MoistureReading";
 import type { Photo } from "@/lib/domain/Photo";
@@ -50,6 +54,12 @@ type TwinState = {
   notesByRoomId: Record<string, RoomNote[]>;
   noteError: string | null;
   isSavingNote: boolean;
+
+  /** Frontend cache of persisted equipment, keyed by room id. */
+  equipmentByRoomId: Record<string, Equipment[]>;
+  equipmentError: string | null;
+  isSavingEquipment: boolean;
+  isUpdatingEquipmentStatus: boolean;
 
   activeLossId: string | null;
   activeLoss: Loss | null;
@@ -86,6 +96,23 @@ type TwinState = {
   loadRoomNotes: (roomId: string) => Promise<RoomNote[]>;
   saveRoomNote: (roomId: string, note: string) => Promise<RoomNote>;
   clearNoteError: () => void;
+
+  loadRoomEquipment: (roomId: string) => Promise<Equipment[]>;
+  saveEquipment: (
+    roomId: string,
+    equipment: {
+      equipmentType: string;
+      assetNumber?: string | null;
+      status: EquipmentStatus;
+      location: string;
+    }
+  ) => Promise<Equipment>;
+  updateEquipmentStatus: (
+    roomId: string,
+    equipmentId: string,
+    status: EquipmentStatus
+  ) => Promise<Equipment>;
+  clearEquipmentError: () => void;
 
   setActiveLossId: (lossId: string | null) => void;
   clearError: () => void;
@@ -173,6 +200,11 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   noteError: null,
   isSavingNote: false,
 
+  equipmentByRoomId: {},
+  equipmentError: null,
+  isSavingEquipment: false,
+  isUpdatingEquipmentStatus: false,
+
   activeLossId: null,
   activeLoss: null,
 
@@ -195,6 +227,8 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   clearMoistureError: () => set({ moistureError: null }),
 
   clearNoteError: () => set({ noteError: null }),
+
+  clearEquipmentError: () => set({ equipmentError: null }),
 
   hydrateFromDatabase: async () =>
     runAsyncAction(set, async () => {
@@ -425,6 +459,120 @@ export const useTwinStore = create<TwinState>((set, get) => ({
       set({
         isSavingNote: false,
         noteError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  loadRoomEquipment: async (roomId) => {
+    set({ equipmentError: null });
+
+    try {
+      const equipment = await getEquipment(roomId);
+
+      set((state) => ({
+        equipmentByRoomId: {
+          ...state.equipmentByRoomId,
+          [roomId]: equipment,
+        },
+        equipmentError: null,
+      }));
+
+      return equipment;
+    } catch (error) {
+      set({
+        equipmentError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  saveEquipment: async (roomId, equipment) => {
+    if (get().isSavingEquipment) {
+      throw new Error("Equipment is already being saved");
+    }
+
+    const trimmedType = equipment.equipmentType.trim();
+    const trimmedLocation = equipment.location.trim();
+
+    if (!trimmedType || !trimmedLocation) {
+      const message = "Equipment type and location are required.";
+      set({ equipmentError: message });
+      throw new Error(message);
+    }
+
+    set({
+      isSavingEquipment: true,
+      equipmentError: null,
+    });
+
+    try {
+      const lossId = await ensureActiveLossId(get, set);
+
+      await createEquipment({
+        lossId,
+        roomId,
+        equipmentType: trimmedType,
+        assetNumber: equipment.assetNumber,
+        status: equipment.status,
+        location: trimmedLocation,
+      });
+
+      const items = await getEquipment(roomId);
+
+      set((state) => ({
+        equipmentByRoomId: {
+          ...state.equipmentByRoomId,
+          [roomId]: items,
+        },
+        isSavingEquipment: false,
+        equipmentError: null,
+      }));
+
+      return items[0]!;
+    } catch (error) {
+      set({
+        isSavingEquipment: false,
+        equipmentError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  updateEquipmentStatus: async (roomId, equipmentId, status) => {
+    if (get().isUpdatingEquipmentStatus) {
+      throw new Error("Equipment status is already being updated");
+    }
+
+    set({
+      isUpdatingEquipmentStatus: true,
+      equipmentError: null,
+    });
+
+    try {
+      await persistEquipmentStatus(equipmentId, status);
+
+      const items = await getEquipment(roomId);
+
+      set((state) => ({
+        equipmentByRoomId: {
+          ...state.equipmentByRoomId,
+          [roomId]: items,
+        },
+        isUpdatingEquipmentStatus: false,
+        equipmentError: null,
+      }));
+
+      const updated = items.find((item) => item.id === equipmentId);
+      if (!updated) {
+        throw new Error("Equipment was updated but could not be reloaded");
+      }
+
+      return updated;
+    } catch (error) {
+      set({
+        isUpdatingEquipmentStatus: false,
+        equipmentError: getErrorMessage(error),
       });
       throw error;
     }
