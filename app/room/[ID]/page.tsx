@@ -13,13 +13,19 @@ export default function RoomPage() {
   const roomId = params.ID;
 
   const hydrateFromDatabase = useTwinStore((state) => state.hydrateFromDatabase);
+  const loadRoomPhotos = useTwinStore((state) => state.loadRoomPhotos);
   const room = useTwinStore((state) =>
     state.rooms.find((item) => item.id === roomId)
   );
 
   useEffect(() => {
-    void hydrateFromDatabase();
-  }, [hydrateFromDatabase]);
+    void (async () => {
+      await hydrateFromDatabase();
+      if (roomId) {
+        await loadRoomPhotos(roomId);
+      }
+    })();
+  }, [hydrateFromDatabase, loadRoomPhotos, roomId]);
 
   const title = room?.name ?? "Room not found";
   const subtitle = room
@@ -35,8 +41,7 @@ export default function RoomPage() {
           <div className="grid gap-6">
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
               <h2 className="mb-6 text-2xl font-bold">📷 Photos</h2>
-              {/* TODO: Upload photo to Supabase Storage */}
-              <PhotoUploader />
+              <PhotoUploader roomId={roomId} />
             </div>
 
             <div className="grid gap-6 md:grid-cols-3">

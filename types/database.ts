@@ -1,9 +1,10 @@
 /**
  * Supabase Database types for RestorationOS MVP tables.
- * Keep in sync with supabase/migrations/20260322000000_create_losses_rooms.sql
+ * Keep in sync with:
+ * - supabase/migrations/20260322000000_create_losses_rooms.sql
+ * - supabase/migrations/20260810000000_create_photos_and_room_photos_bucket.sql
  *
- * TODO: Photos table is intentionally omitted. Future Digital Twin will organize
- * photos by Building → Floor → Room → Wall.
+ * TODO: Future Digital Twin will organize photos by Building → Floor → Room → Wall.
  */
 
 export type Json =
@@ -97,6 +98,51 @@ export type Database = {
           },
         ];
       };
+      photos: {
+        Row: {
+          id: string;
+          loss_id: string;
+          room_id: string;
+          storage_path: string;
+          public_url: string;
+          original_filename: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          loss_id: string;
+          room_id: string;
+          storage_path: string;
+          public_url: string;
+          original_filename: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          loss_id?: string;
+          room_id?: string;
+          storage_path?: string;
+          public_url?: string;
+          original_filename?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "photos_loss_id_fkey";
+            columns: ["loss_id"];
+            isOneToOne: false;
+            referencedRelation: "losses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "photos_room_id_fkey";
+            columns: ["room_id"];
+            isOneToOne: false;
+            referencedRelation: "rooms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -107,3 +153,6 @@ export type Database = {
 
 export type LossRow = Database["public"]["Tables"]["losses"]["Row"];
 export type RoomRow = Database["public"]["Tables"]["rooms"]["Row"];
+export type PhotoRow = Database["public"]["Tables"]["photos"]["Row"];
+
+export const ROOM_PHOTOS_BUCKET = "room-photos" as const;

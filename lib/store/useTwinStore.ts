@@ -5,13 +5,17 @@ import {
   createRoom,
   deleteRoom as removePersistedRoom,
   getLoss,
+  getPhotos,
   getRooms,
   updateRoom as persistRoomUpdate,
+  uploadRoomPhoto,
   type CreateLossInput,
   type CreateRoomInput,
   type UpdateRoomInput,
 } from "@/lib/database";
+import { getErrorMessage } from "@/lib/database/errors";
 import type { Loss } from "@/lib/domain/Loss";
+import type { Photo } from "@/lib/domain/Photo";
 import type { Room } from "@/lib/domain/Room";
 import { runAsyncAction } from "@/lib/store/async";
 import type { AsyncStatus } from "@/types";
@@ -24,6 +28,12 @@ type TwinState = {
   address: string;
   customer: string;
   rooms: Room[];
+
+  /** Frontend cache of persisted photos, keyed by room id. */
+  photosByRoomId: Record<string, Photo[]>;
+  photoStatus: AsyncStatus;
+  photoError: string | null;
+  isUploadingPhotos: boolean;
 
   activeLossId: string | null;
   activeLoss: Loss | null;
@@ -43,6 +53,10 @@ type TwinState = {
    * Hydrate active loss + rooms from Supabase (after refresh).
    */
   hydrateFromDatabase: () => Promise<void>;
+
+  loadRoomPhotos: (roomId: string) => Promise<Photo[]>;
+  uploadRoomPhotos: (roomId: string, files: File[]) => Promise<Photo[]>;
+  clearPhotoError: () => void;
 
   setActiveLossId: (lossId: string | null) => void;
   clearError: () => void;
@@ -117,6 +131,11 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   customer: "",
   rooms: [],
 
+  photosByRoomId: {},
+  photoStatus: "idle",
+  photoError: null,
+  isUploadingPhotos: false,
+
   activeLossId: null,
   activeLoss: null,
 
@@ -133,6 +152,8 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   },
 
   clearError: () => set({ error: null, status: "idle" }),
+
+  clearPhotoError: () => set({ photoError: null, photoStatus: "idle" }),
 
   hydrateFromDatabase: async () =>
     runAsyncAction(set, async () => {
@@ -156,6 +177,82 @@ export const useTwinStore = create<TwinState>((set, get) => ({
         status: "idle",
       });
     }),
+
+  loadRoomPhotos: async (roomId) => {
+    set({ photoStatus: "loading", photoError: null });
+
+    try {
+      const photos = await getPhotos(roomId);
+
+      set((state) => ({
+        photosByRoomId: {
+          ...state.photosByRoomId,
+          [roomId]: photos,
+        },
+        photoStatus: "idle",
+        photoError: null,
+      }));
+
+      return photos;
+    } catch (error) {
+      set({
+        photoStatus: "error",
+        photoError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  uploadRoomPhotos: async (roomId, files) => {
+    if (files.length === 0) {
+      return get().photosByRoomId[roomId] ?? [];
+    }
+
+    if (get().isUploadingPhotos) {
+      return get().photosByRoomId[roomId] ?? [];
+    }
+
+    set({
+      photoStatus: "loading",
+      photoError: null,
+      isUploadingPhotos: true,
+    });
+
+    try {
+      const lossId = await ensureActiveLossId(get, set);
+      const uploaded: Photo[] = [];
+
+      for (const file of files) {
+        const photo = await uploadRoomPhoto({
+          lossId,
+          roomId,
+          file,
+        });
+        uploaded.push(photo);
+      }
+
+      const photos = await getPhotos(roomId);
+
+      set((state) => ({
+        photosByRoomId: {
+          ...state.photosByRoomId,
+          [roomId]: photos,
+        },
+        photoStatus: "idle",
+        photoError: null,
+        isUploadingPhotos: false,
+      }));
+
+      return uploaded;
+    } catch (error) {
+      set({
+        photoStatus: "error",
+        photoError: getErrorMessage(error),
+        isUploadingPhotos: false,
+      });
+      throw error;
+    }
+  },
 
   addRoom: async (name) =>
     runAsyncAction(set, async () => {

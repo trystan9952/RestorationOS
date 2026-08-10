@@ -52,8 +52,10 @@ export {
   getPhotos,
   listPhotosByRoomId,
   updatePhoto,
+  uploadRoomPhoto,
   type CreatePhotoInput,
   type UpdatePhotoInput,
+  type UploadRoomPhotoInput,
 } from "@/lib/database/photoRepository";
 
 export {

@@ -2,4 +2,5 @@
 
 export type AsyncStatus = "idle" | "loading" | "error";
 
-export type { Database, LossRow, RoomRow } from "@/types/database";
+export type { Database, LossRow, PhotoRow, RoomRow } from "@/types/database";
+export { ROOM_PHOTOS_BUCKET } from "@/types/database";
