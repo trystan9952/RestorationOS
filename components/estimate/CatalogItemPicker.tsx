@@ -92,8 +92,8 @@ export function CatalogItemPicker({
         <DialogHeader>
           <DialogTitle>Add from Catalog</DialogTitle>
           <DialogDescription className="text-slate-400">
-            Selecting an item copies description, unit, and unit price into this
-            line item. Quantity source is not changed.
+            Select a catalog item to copy its description, unit, and unit price.
+            You will confirm quantity next.
           </DialogDescription>
         </DialogHeader>
 
@@ -150,8 +150,8 @@ export function CatalogItemPicker({
                     <button
                       type="button"
                       onClick={() => {
+                        // Parent controls dialog close + next step (e.g. quantity source).
                         onSelect(item);
-                        onOpenChange(false);
                       }}
                       className="flex w-full flex-col gap-1 px-3 py-3 text-left hover:bg-slate-800/80"
                     >

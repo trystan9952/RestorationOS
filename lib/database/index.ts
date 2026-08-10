@@ -86,6 +86,7 @@ export {
   createScopeItem,
   deleteScopeItem,
   getScopeItems,
+  updateScopeEstimateLink,
   updateScopeItem,
   type CreateScopeItemInput,
   type UpdateScopeItemInput,

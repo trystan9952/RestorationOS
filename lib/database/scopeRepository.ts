@@ -6,8 +6,10 @@ import type { ScopeItemRow } from "@/types/database";
 /**
  * Room scope / work-item persistence.
  *
- * TODO: Future Digital Twin may attach scope items to Wall / estimate lines.
- * Wall relationships are intentionally omitted in this MVP.
+ * estimate_line_item_id is an optional workflow link set by Add to Estimate.
+ * It clears via ON DELETE SET NULL when the estimate line item is removed.
+ *
+ * TODO: Future Digital Twin may attach scope items to Wall.
  */
 
 export type CreateScopeItemInput = {
@@ -19,6 +21,7 @@ export type CreateScopeItemInput = {
 export type UpdateScopeItemInput = {
   description?: string;
   completed?: boolean;
+  estimateLineItemId?: string | null;
 };
 
 function mapScopeItemRow(row: ScopeItemRow): ScopeItem {
@@ -28,6 +31,7 @@ function mapScopeItemRow(row: ScopeItemRow): ScopeItem {
     roomId: row.room_id,
     description: row.description,
     completed: row.completed,
+    estimateLineItemId: row.estimate_line_item_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -78,6 +82,7 @@ export async function updateScopeItem(
   const update: {
     description?: string;
     completed?: boolean;
+    estimate_line_item_id?: string | null;
     updated_at: string;
   } = {
     updated_at: new Date().toISOString(),
@@ -88,6 +93,9 @@ export async function updateScopeItem(
   }
   if (input.completed !== undefined) {
     update.completed = input.completed;
+  }
+  if (input.estimateLineItemId !== undefined) {
+    update.estimate_line_item_id = input.estimateLineItemId;
   }
 
   const data = unwrapSingle(
@@ -100,6 +108,14 @@ export async function updateScopeItem(
   );
 
   return mapScopeItemRow(data);
+}
+
+/** Link or unlink a scope item to an estimate line item. */
+export async function updateScopeEstimateLink(
+  scopeItemId: string,
+  estimateLineItemId: string | null
+): Promise<ScopeItem> {
+  return updateScopeItem(scopeItemId, { estimateLineItemId });
 }
 
 export async function deleteScopeItem(id: string): Promise<void> {

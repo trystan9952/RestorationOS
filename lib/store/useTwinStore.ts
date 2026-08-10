@@ -17,6 +17,7 @@ import {
   deleteRoom as removePersistedRoom,
   deleteRoomMeasurement as removePersistedRoomMeasurement,
   deleteScopeItem as removePersistedScopeItem,
+  updateScopeEstimateLink,
   getEquipment,
   getEstimateAreas,
   getEstimateByLossId,
@@ -63,6 +64,7 @@ import type { RoomMeasurement } from "@/lib/domain/RoomMeasurement";
 import type { RoomNote } from "@/lib/domain/RoomNote";
 import type { ScopeItem } from "@/lib/domain/ScopeItem";
 import { runAsyncAction } from "@/lib/store/async";
+import { getRoomQuantitySourceValue } from "@/lib/utils/estimateQuantitySource";
 import type { AsyncStatus } from "@/types";
 
 export type { Room };
@@ -102,6 +104,7 @@ type TwinState = {
   isSavingScope: boolean;
   isUpdatingScope: boolean;
   isDeletingScope: boolean;
+  isAddingScopeToEstimate: boolean;
 
   /**
    * Frontend cache of room measurements, keyed by room id.
@@ -205,6 +208,18 @@ type TwinState = {
   saveScopeItem: (roomId: string, description: string) => Promise<ScopeItem>;
   toggleScopeItem: (roomId: string, scopeItemId: string) => Promise<ScopeItem>;
   deleteScopeItem: (roomId: string, scopeItemId: string) => Promise<void>;
+  /**
+   * Convert a scope item into an estimate line item via catalog + quantity source.
+   * Finds/creates the estimate and room-linked estimate area; links the scope item.
+   */
+  addScopeItemToEstimate: (input: {
+    scopeItemId: string;
+    roomId: string;
+    catalogItem: Pick<PriceCatalogItem, "name" | "unit" | "unitPrice">;
+    quantitySource: EstimateQuantitySource;
+    /** Required when quantitySource is manual. */
+    manualQuantity?: number;
+  }) => Promise<EstimateLineItem>;
   clearScopeError: () => void;
 
   loadRoomMeasurement: (roomId: string) => Promise<RoomMeasurement | null>;
@@ -414,6 +429,7 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   isSavingScope: false,
   isUpdatingScope: false,
   isDeletingScope: false,
+  isAddingScopeToEstimate: false,
 
   roomMeasurementsByRoomId: {},
   measurementError: null,
@@ -1040,6 +1056,155 @@ export const useTwinStore = create<TwinState>((set, get) => ({
     }
   },
 
+  addScopeItemToEstimate: async (input) => {
+    if (get().isAddingScopeToEstimate) {
+      throw new Error("A scope item is already being added to the estimate");
+    }
+
+    set({
+      isAddingScopeToEstimate: true,
+      scopeError: null,
+      estimateError: null,
+    });
+
+    try {
+      const scopeItems =
+        get().scopeItemsByRoomId[input.roomId] ??
+        (await getScopeItems(input.roomId));
+      const scopeItem = scopeItems.find((item) => item.id === input.scopeItemId);
+
+      if (!scopeItem) {
+        throw new Error("Scope item not found.");
+      }
+      if (scopeItem.estimateLineItemId) {
+        throw new Error("This scope item is already on the estimate.");
+      }
+
+      const lossId = scopeItem.lossId;
+      const estimate = await get().loadEstimateForLoss(lossId);
+
+      let areas =
+        get().estimateAreasByEstimateId[estimate.id] ??
+        (await getEstimateAreas(estimate.id));
+      let area = areas.find((entry) => entry.roomId === input.roomId) ?? null;
+
+      if (!area) {
+        const room =
+          get().rooms.find((entry) => entry.id === input.roomId) ?? null;
+        area = await get().saveEstimateArea({
+          estimateId: estimate.id,
+          name: room?.name?.trim() || "Room",
+          roomId: input.roomId,
+        });
+        areas =
+          get().estimateAreasByEstimateId[estimate.id] ??
+          (await getEstimateAreas(estimate.id));
+        area = areas.find((entry) => entry.id === area!.id) ?? area;
+      }
+
+      let quantity: number;
+      let unit: string;
+
+      if (input.quantitySource === "manual") {
+        const manualQuantity = input.manualQuantity;
+        if (
+          manualQuantity === undefined ||
+          !Number.isFinite(manualQuantity) ||
+          manualQuantity <= 0
+        ) {
+          throw new Error("Quantity must be a number greater than 0.");
+        }
+        quantity = manualQuantity;
+        unit = input.catalogItem.unit.trim();
+      } else {
+        const measurement =
+          get().roomMeasurementsByRoomId?.[input.roomId] ??
+          (await getRoomMeasurement(input.roomId));
+
+        if (measurement) {
+          set((state) => ({
+            roomMeasurementsByRoomId: {
+              ...(state.roomMeasurementsByRoomId ?? {}),
+              [input.roomId]: measurement,
+            },
+          }));
+        }
+
+        const resolved = getRoomQuantitySourceValue(
+          measurement,
+          input.quantitySource
+        );
+        if (!resolved) {
+          throw new Error(
+            "Add room measurements to use calculated quantities."
+          );
+        }
+        quantity = resolved.quantity;
+        unit = resolved.unit;
+      }
+
+      const existingItems =
+        get().estimateLineItemsByAreaId[area.id] ??
+        (await getEstimateLineItems(area.id));
+
+      const lineItem = await createEstimateLineItem({
+        estimateAreaId: area.id,
+        description: input.catalogItem.name.trim(),
+        quantity,
+        unit,
+        unitPrice: input.catalogItem.unitPrice,
+        quantitySource: input.quantitySource,
+        sortOrder: existingItems.length,
+      });
+
+      await updateScopeEstimateLink(input.scopeItemId, lineItem.id);
+
+      const [refreshedScope, refreshedLineItems] = await Promise.all([
+        getScopeItems(input.roomId),
+        getEstimateLineItems(area.id),
+      ]);
+
+      set((state) => ({
+        scopeItemsByRoomId: {
+          ...state.scopeItemsByRoomId,
+          [input.roomId]: refreshedScope,
+        },
+        estimateLineItemsByAreaId: {
+          ...state.estimateLineItemsByAreaId,
+          [area.id]: refreshedLineItems,
+        },
+        isAddingScopeToEstimate: false,
+        scopeError: null,
+        estimateError: null,
+      }));
+
+      return (
+        refreshedLineItems.find((item) => item.id === lineItem.id) ?? lineItem
+      );
+    } catch (error) {
+      // Reload estimate/scope so UI matches the database after a partial failure.
+      try {
+        const lossId =
+          get().activeLossId ??
+          (get().scopeItemsByRoomId[input.roomId] ?? []).find(
+            (item) => item.id === input.scopeItemId
+          )?.lossId;
+        if (lossId) {
+          await get().loadEstimateForLoss(lossId);
+        }
+        await get().loadRoomScope(input.roomId);
+      } catch {
+        // Keep the original error
+      }
+
+      set({
+        isAddingScopeToEstimate: false,
+        scopeError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
   loadRoomMeasurement: async (roomId) => {
     set({ measurementError: null });
 
@@ -1408,6 +1573,10 @@ export const useTwinStore = create<TwinState>((set, get) => ({
     });
 
     try {
+      const removedLineItemIds = (
+        get().estimateLineItemsByAreaId[areaId] ?? []
+      ).map((item) => item.id);
+
       await removePersistedEstimateArea(areaId);
       const areas = await getEstimateAreas(estimateId);
 
@@ -1415,12 +1584,25 @@ export const useTwinStore = create<TwinState>((set, get) => ({
         const nextLineItems = { ...state.estimateLineItemsByAreaId };
         delete nextLineItems[areaId];
 
+        const removed = new Set(removedLineItemIds);
+        const nextScope: Record<string, ScopeItem[]> = {};
+        for (const [roomId, items] of Object.entries(
+          state.scopeItemsByRoomId
+        )) {
+          nextScope[roomId] = items.map((item) =>
+            item.estimateLineItemId && removed.has(item.estimateLineItemId)
+              ? { ...item, estimateLineItemId: null }
+              : item
+          );
+        }
+
         return {
           estimateAreasByEstimateId: {
             ...state.estimateAreasByEstimateId,
             [estimateId]: areas,
           },
           estimateLineItemsByAreaId: nextLineItems,
+          scopeItemsByRoomId: nextScope,
           isDeletingEstimateArea: false,
           estimateError: null,
         };
@@ -1604,14 +1786,28 @@ export const useTwinStore = create<TwinState>((set, get) => ({
       await removePersistedEstimateLineItem(lineItemId);
       const items = await getEstimateLineItems(areaId);
 
-      set((state) => ({
-        estimateLineItemsByAreaId: {
-          ...state.estimateLineItemsByAreaId,
-          [areaId]: items,
-        },
-        isDeletingEstimateLineItem: false,
-        estimateError: null,
-      }));
+      set((state) => {
+        const nextScope: Record<string, ScopeItem[]> = {};
+        for (const [roomId, scopeItems] of Object.entries(
+          state.scopeItemsByRoomId
+        )) {
+          nextScope[roomId] = scopeItems.map((item) =>
+            item.estimateLineItemId === lineItemId
+              ? { ...item, estimateLineItemId: null }
+              : item
+          );
+        }
+
+        return {
+          estimateLineItemsByAreaId: {
+            ...state.estimateLineItemsByAreaId,
+            [areaId]: items,
+          },
+          scopeItemsByRoomId: nextScope,
+          isDeletingEstimateLineItem: false,
+          estimateError: null,
+        };
+      });
     } catch (error) {
       set({
         isDeletingEstimateLineItem: false,

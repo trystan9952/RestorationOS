@@ -12,6 +12,7 @@
  * - supabase/migrations/20260810070000_create_room_measurements.sql
  * - supabase/migrations/20260810080000_add_quantity_source_to_estimate_line_items.sql
  * - supabase/migrations/20260810090000_create_price_catalog.sql
+ * - supabase/migrations/20260810100000_add_estimate_line_item_id_to_room_scope_items.sql
  *
  * TODO: Future Digital Twin will organize photos by Building → Floor → Room → Wall.
  */
@@ -306,6 +307,7 @@ export type Database = {
           room_id: string;
           description: string;
           completed: boolean;
+          estimate_line_item_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -315,6 +317,7 @@ export type Database = {
           room_id: string;
           description: string;
           completed?: boolean;
+          estimate_line_item_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -324,6 +327,7 @@ export type Database = {
           room_id?: string;
           description?: string;
           completed?: boolean;
+          estimate_line_item_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -340,6 +344,13 @@ export type Database = {
             columns: ["room_id"];
             isOneToOne: false;
             referencedRelation: "rooms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "room_scope_items_estimate_line_item_id_fkey";
+            columns: ["estimate_line_item_id"];
+            isOneToOne: false;
+            referencedRelation: "estimate_line_items";
             referencedColumns: ["id"];
           },
         ];
