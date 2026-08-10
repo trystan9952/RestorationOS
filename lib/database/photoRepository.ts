@@ -122,6 +122,45 @@ export async function getPhotos(roomId: string): Promise<Photo[]> {
   return (data ?? []).map(mapPhotoRow);
 }
 
+/** Fetch all photos for a loss (for Storage cleanup before job delete). */
+export async function getPhotosByLossId(lossId: string): Promise<Photo[]> {
+  const supabase = getSupabaseClient();
+
+  const data = unwrapQuery(
+    await supabase
+      .from("photos")
+      .select("*")
+      .eq("loss_id", lossId)
+      .order("created_at", { ascending: true })
+  );
+
+  return (data ?? []).map(mapPhotoRow);
+}
+
+/** Remove photo files from the room-photos Storage bucket. */
+export async function deleteRoomPhotoFiles(
+  storagePaths: string[]
+): Promise<void> {
+  const paths = storagePaths.filter((path) => path.trim().length > 0);
+  if (paths.length === 0) {
+    return;
+  }
+
+  const supabase = getSupabaseClient();
+  const chunkSize = 100;
+
+  for (let index = 0; index < paths.length; index += chunkSize) {
+    const chunk = paths.slice(index, index + chunkSize);
+    const { error } = await supabase.storage
+      .from(ROOM_PHOTOS_BUCKET)
+      .remove(chunk);
+
+    if (error) {
+      throw new DatabaseError(error.message, error);
+    }
+  }
+}
+
 /** @deprecated Prefer getPhotos */
 export const listPhotosByRoomId = getPhotos;
 

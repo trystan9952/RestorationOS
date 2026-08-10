@@ -1,4 +1,8 @@
 import { unwrapQuery, unwrapSingle } from "@/lib/database/errors";
+import {
+  deleteRoomPhotoFiles,
+  getPhotosByLossId,
+} from "@/lib/database/photoRepository";
 import type { Loss, LossStatus, LossType } from "@/lib/domain/Loss";
 import { getSupabaseClient } from "@/lib/supabase";
 import type { Database, LossRow } from "@/types/database";
@@ -132,7 +136,20 @@ export async function updateLossStatus(
   return updateLoss(id, { status });
 }
 
+/**
+ * Delete a loss after removing its photo files from Storage.
+ * Related DB rows (rooms, photos metadata, moisture, notes, equipment)
+ * cascade via existing foreign keys.
+ *
+ * Storage cleanup runs first. If Storage deletion fails, the loss row
+ * is left intact so the job is not silently half-deleted.
+ */
 export async function deleteLoss(id: string): Promise<void> {
+  const photos = await getPhotosByLossId(id);
+  const storagePaths = photos.map((photo) => photo.storagePath);
+
+  await deleteRoomPhotoFiles(storagePaths);
+
   const supabase = getSupabaseClient();
 
   unwrapQuery(await supabase.from("losses").delete().eq("id", id));

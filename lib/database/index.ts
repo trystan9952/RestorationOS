@@ -53,8 +53,10 @@ export {
 export {
   createPhoto,
   deletePhoto,
+  deleteRoomPhotoFiles,
   getPhotoById,
   getPhotos,
+  getPhotosByLossId,
   listPhotosByRoomId,
   updatePhoto,
   uploadRoomPhoto,

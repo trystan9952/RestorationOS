@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
+import { DeleteJobDialog } from "@/components/jobs/DeleteJobDialog";
+import { EditJobDialog } from "@/components/jobs/EditJobDialog";
 import { Header } from "@/components/layout/Header";
 import {
   LOSS_STATUSES,
@@ -48,6 +51,7 @@ function shortenDescription(value: string, max = 80): string {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const hydrateFromDatabase = useTwinStore(
     (state) => state.hydrateFromDatabase
   );
@@ -62,6 +66,7 @@ export default function DashboardPage() {
   const isUpdatingLossStatus = useTwinStore(
     (state) => state.isUpdatingLossStatus
   );
+  const isDeletingLoss = useTwinStore((state) => state.isDeletingLoss);
   const lossError = useTwinStore((state) => state.lossError);
   const rooms = useTwinStore((state) => state.rooms);
   const photosByRoomId = useTwinStore((state) => state.photosByRoomId);
@@ -75,6 +80,8 @@ export default function DashboardPage() {
   const [roomName, setRoomName] = useState("");
   const [isAddingRoom, setIsAddingRoom] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -204,6 +211,31 @@ export default function DashboardPage() {
             ) : null}
 
             <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
+              <div className="mb-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearLossError();
+                    setIsEditOpen(true);
+                  }}
+                  disabled={isDeletingLoss}
+                  className="rounded-lg border border-slate-600 px-3 py-1.5 text-sm hover:bg-slate-800 disabled:opacity-60"
+                >
+                  Edit Job
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearLossError();
+                    setIsDeleteOpen(true);
+                  }}
+                  disabled={isDeletingLoss}
+                  className="rounded-lg border border-red-900/70 px-3 py-1.5 text-sm text-red-400 hover:bg-red-950/40 disabled:opacity-60"
+                >
+                  Delete Job
+                </button>
+              </div>
+
               <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-400">
@@ -462,6 +494,24 @@ export default function DashboardPage() {
             </div>
           </div>
         ) : null}
+
+        {activeLoss ? (
+          <EditJobDialog
+            open={isEditOpen}
+            onOpenChange={setIsEditOpen}
+            loss={activeLoss}
+          />
+        ) : null}
+
+        <DeleteJobDialog
+          open={isDeleteOpen}
+          onOpenChange={setIsDeleteOpen}
+          loss={activeLoss}
+          onDeleted={() => {
+            setIsDeleteOpen(false);
+            router.push("/");
+          }}
+        />
       </div>
     </main>
   );

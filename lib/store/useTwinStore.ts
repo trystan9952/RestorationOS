@@ -15,11 +15,14 @@ import {
   getRoomNotes,
   getRooms,
   updateEquipmentStatus as persistEquipmentStatus,
+  updateLoss as persistLossUpdate,
   updateLossStatus as persistLossStatus,
+  deleteLoss as removePersistedLoss,
   updateRoom as persistRoomUpdate,
   uploadRoomPhoto,
   type CreateLossInput,
   type CreateRoomInput,
+  type UpdateLossInput,
   type UpdateRoomInput,
 } from "@/lib/database";
 import { getErrorMessage } from "@/lib/database/errors";
@@ -66,6 +69,8 @@ type TwinState = {
   activeLossId: string | null;
   activeLoss: Loss | null;
   isUpdatingLossStatus: boolean;
+  isUpdatingLoss: boolean;
+  isDeletingLoss: boolean;
   lossError: string | null;
 
   /** Frontend cache of all losses for the Jobs home list. */
@@ -134,6 +139,17 @@ type TwinState = {
   clearLossError: () => void;
   clearLossesError: () => void;
   updateLossStatus: (status: LossStatus) => Promise<Loss>;
+
+  /** Update job/customer fields on the active loss (status excluded). */
+  updateLossDetails: (
+    input: Omit<UpdateLossInput, "status">
+  ) => Promise<Loss>;
+
+  /**
+   * Delete a loss after Storage cleanup. Clears caches / activeLossId when
+   * the deleted loss was active. Returns whether it was the active job.
+   */
+  deleteLoss: (lossId: string) => Promise<{ wasActive: boolean }>;
 
   /** Load all losses from Supabase for the Jobs list. */
   loadLosses: () => Promise<Loss[]>;
@@ -240,6 +256,8 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   activeLossId: null,
   activeLoss: null,
   isUpdatingLossStatus: false,
+  isUpdatingLoss: false,
+  isDeletingLoss: false,
   lossError: null,
 
   losses: [],
@@ -810,6 +828,110 @@ export const useTwinStore = create<TwinState>((set, get) => ({
       set({
         isUpdatingLossStatus: false,
         lossError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  updateLossDetails: async (input) => {
+    if (get().isUpdatingLoss) {
+      throw new Error("Loss details are already being updated");
+    }
+
+    const lossId = get().activeLossId ?? readStoredLossId();
+    if (!lossId) {
+      const message = "No active loss to update.";
+      set({ lossError: message });
+      throw new Error(message);
+    }
+
+    set({
+      isUpdatingLoss: true,
+      lossError: null,
+    });
+
+    try {
+      const loss = await persistLossUpdate(lossId, {
+        address: input.address,
+        customer: input.customer,
+        phone: input.phone,
+        insurance: input.insurance,
+        claimNumber: input.claimNumber,
+        lossType: input.lossType,
+        dateOfLoss: input.dateOfLoss,
+      });
+
+      set((state) => ({
+        activeLossId: loss.id,
+        activeLoss: loss,
+        address: loss.address,
+        customer: loss.customer,
+        losses: state.losses.map((existing) =>
+          existing.id === loss.id ? loss : existing
+        ),
+        isUpdatingLoss: false,
+        lossError: null,
+      }));
+
+      return loss;
+    } catch (error) {
+      set({
+        isUpdatingLoss: false,
+        lossError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  deleteLoss: async (lossId) => {
+    if (get().isDeletingLoss) {
+      throw new Error("A job is already being deleted");
+    }
+
+    set({
+      isDeletingLoss: true,
+      lossError: null,
+      lossesError: null,
+    });
+
+    try {
+      const wasActive =
+        get().activeLossId === lossId || readStoredLossId() === lossId;
+
+      await removePersistedLoss(lossId);
+
+      const nextLosses = get().losses.filter((loss) => loss.id !== lossId);
+
+      if (wasActive) {
+        writeStoredLossId(null);
+        set({
+          activeLossId: null,
+          activeLoss: null,
+          address: "",
+          customer: "",
+          rooms: [],
+          photosByRoomId: {},
+          moistureByRoomId: {},
+          notesByRoomId: {},
+          equipmentByRoomId: {},
+          losses: nextLosses,
+          isDeletingLoss: false,
+          lossError: null,
+        });
+      } else {
+        set({
+          losses: nextLosses,
+          isDeletingLoss: false,
+          lossError: null,
+        });
+      }
+
+      return { wasActive };
+    } catch (error) {
+      set({
+        isDeletingLoss: false,
+        lossError: getErrorMessage(error),
+        lossesError: getErrorMessage(error),
       });
       throw error;
     }

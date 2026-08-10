@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { DeleteJobDialog } from "@/components/jobs/DeleteJobDialog";
 import type { Loss } from "@/lib/domain/Loss";
 import { useTwinStore } from "@/lib/store/useTwinStore";
 
@@ -23,48 +24,63 @@ function formatDateOfLoss(value: string): string {
 function JobCard({
   loss,
   onOpen,
+  onDelete,
   disabled,
 }: {
   loss: Loss;
   onOpen: (lossId: string) => void;
+  onDelete: (loss: Loss) => void;
   disabled: boolean;
 }) {
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(loss.id)}
-      disabled={disabled}
-      className="w-full rounded-xl border border-slate-800 bg-slate-900 p-5 text-left transition hover:border-blue-500 disabled:opacity-60"
-    >
-      <h2 className="text-xl font-semibold tracking-tight">
-        {loss.address.trim() || "Untitled address"}
-      </h2>
-      <p className="mt-1 text-slate-300">
-        {loss.customer.trim() || "No customer"}
-      </p>
+    <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 transition hover:border-blue-500">
+      <button
+        type="button"
+        onClick={() => onOpen(loss.id)}
+        disabled={disabled}
+        className="w-full text-left disabled:opacity-60"
+      >
+        <h2 className="text-xl font-semibold tracking-tight">
+          {loss.address.trim() || "Untitled address"}
+        </h2>
+        <p className="mt-1 text-slate-300">
+          {loss.customer.trim() || "No customer"}
+        </p>
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-        <span className="font-medium text-blue-300">{loss.lossType} Loss</span>
-        <span className="text-slate-500">·</span>
-        <span className="text-slate-400">
-          Date of Loss: {formatDateOfLoss(loss.dateOfLoss)}
-        </span>
-      </div>
-
-      <p className="mt-3 text-sm">
-        <span className="text-slate-500">Status: </span>
-        <span className="font-medium text-yellow-400">{loss.status}</span>
-      </p>
-
-      {(loss.insurance.trim() || loss.claimNumber.trim()) && (
-        <div className="mt-3 space-y-1 text-sm text-slate-400">
-          {loss.insurance.trim() ? <p>{loss.insurance.trim()}</p> : null}
-          {loss.claimNumber.trim() ? (
-            <p>Claim #{loss.claimNumber.trim()}</p>
-          ) : null}
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          <span className="font-medium text-blue-300">{loss.lossType} Loss</span>
+          <span className="text-slate-500">·</span>
+          <span className="text-slate-400">
+            Date of Loss: {formatDateOfLoss(loss.dateOfLoss)}
+          </span>
         </div>
-      )}
-    </button>
+
+        <p className="mt-3 text-sm">
+          <span className="text-slate-500">Status: </span>
+          <span className="font-medium text-yellow-400">{loss.status}</span>
+        </p>
+
+        {(loss.insurance.trim() || loss.claimNumber.trim()) && (
+          <div className="mt-3 space-y-1 text-sm text-slate-400">
+            {loss.insurance.trim() ? <p>{loss.insurance.trim()}</p> : null}
+            {loss.claimNumber.trim() ? (
+              <p>Claim #{loss.claimNumber.trim()}</p>
+            ) : null}
+          </div>
+        )}
+      </button>
+
+      <div className="mt-4 border-t border-slate-800 pt-3">
+        <button
+          type="button"
+          onClick={() => onDelete(loss)}
+          disabled={disabled}
+          className="text-sm text-red-400 hover:text-red-300 disabled:opacity-60"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -76,14 +92,16 @@ export default function Home() {
   const loadLosses = useTwinStore((state) => state.loadLosses);
   const openLoss = useTwinStore((state) => state.openLoss);
   const clearLossesError = useTwinStore((state) => state.clearLossesError);
+  const isDeletingLoss = useTwinStore((state) => state.isDeletingLoss);
   const [openingLossId, setOpeningLossId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Loss | null>(null);
 
   useEffect(() => {
     void loadLosses();
   }, [loadLosses]);
 
   async function handleOpenLoss(lossId: string) {
-    if (openingLossId) {
+    if (openingLossId || isDeletingLoss) {
       return;
     }
 
@@ -93,13 +111,13 @@ export default function Home() {
       await openLoss(lossId);
       router.push("/dashboard");
     } catch {
-      // lossError handled in store; keep user on list
       setOpeningLossId(null);
     }
   }
 
   const isLoading = lossesStatus === "loading";
   const hasError = lossesStatus === "error";
+  const cardsDisabled = openingLossId !== null || isDeletingLoss;
 
   return (
     <main className="min-h-screen bg-slate-950 p-6 text-white md:p-8">
@@ -171,11 +189,28 @@ export default function Home() {
                 key={loss.id}
                 loss={loss}
                 onOpen={(lossId) => void handleOpenLoss(lossId)}
-                disabled={openingLossId !== null}
+                onDelete={setDeleteTarget}
+                disabled={cardsDisabled}
               />
             ))}
           </div>
         ) : null}
+
+        <DeleteJobDialog
+          open={deleteTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDeleteTarget(null);
+            }
+          }}
+          loss={deleteTarget}
+          onDeleted={(wasActive) => {
+            setDeleteTarget(null);
+            if (wasActive) {
+              router.push("/");
+            }
+          }}
+        />
       </div>
     </main>
   );
