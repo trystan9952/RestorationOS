@@ -5,6 +5,9 @@ export type AsyncStatus = "idle" | "loading" | "error";
 export type {
   Database,
   EquipmentRow,
+  EstimateAreaRow,
+  EstimateLineItemRow,
+  EstimateRow,
   LossRow,
   LossStatus,
   LossType,
@@ -12,5 +15,6 @@ export type {
   PhotoRow,
   RoomNoteRow,
   RoomRow,
+  ScopeItemRow,
 } from "@/types/database";
 export { ROOM_PHOTOS_BUCKET } from "@/types/database";

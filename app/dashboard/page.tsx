@@ -212,6 +212,12 @@ export default function DashboardPage() {
 
             <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
               <div className="mb-4 flex flex-wrap gap-2">
+                <Link
+                  href="/estimate"
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium hover:bg-blue-500"
+                >
+                  Estimate
+                </Link>
                 <button
                   type="button"
                   onClick={() => {

@@ -9,6 +9,7 @@ import { Header } from "@/components/layout/Header";
 import { MoistureReadings } from "@/components/moisture/MoistureReadings";
 import { RoomNotes } from "@/components/notes/RoomNotes";
 import { PhotoUploader } from "@/components/photos/PhotoUploader";
+import { RoomScope } from "@/components/scope/RoomScope";
 import { RoomTimeline } from "@/components/twin/RoomTimeline";
 import { useTwinStore } from "@/lib/store/useTwinStore";
 
@@ -23,6 +24,7 @@ export default function RoomPage() {
   );
   const loadRoomNotes = useTwinStore((state) => state.loadRoomNotes);
   const loadRoomEquipment = useTwinStore((state) => state.loadRoomEquipment);
+  const loadRoomScope = useTwinStore((state) => state.loadRoomScope);
   const room = useTwinStore((state) =>
     state.rooms.find((item) => item.id === roomId)
   );
@@ -36,6 +38,7 @@ export default function RoomPage() {
           loadMoistureReadings(roomId),
           loadRoomNotes(roomId),
           loadRoomEquipment(roomId),
+          loadRoomScope(roomId),
         ]);
       }
     })();
@@ -45,6 +48,7 @@ export default function RoomPage() {
     loadRoomEquipment,
     loadRoomNotes,
     loadRoomPhotos,
+    loadRoomScope,
     roomId,
   ]);
 
@@ -79,6 +83,10 @@ export default function RoomPage() {
               <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
                 <RoomNotes roomId={roomId} />
               </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
+              <RoomScope roomId={roomId} />
             </div>
           </div>
         ) : null}

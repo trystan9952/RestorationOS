@@ -81,3 +81,30 @@ export {
   getRoomNotes,
   type CreateRoomNoteInput,
 } from "@/lib/database/roomNoteRepository";
+
+export {
+  createScopeItem,
+  deleteScopeItem,
+  getScopeItems,
+  updateScopeItem,
+  type CreateScopeItemInput,
+  type UpdateScopeItemInput,
+} from "@/lib/database/scopeRepository";
+
+export {
+  createEstimate,
+  createEstimateArea,
+  createEstimateLineItem,
+  deleteEstimateArea,
+  deleteEstimateLineItem,
+  getEstimateAreas,
+  getEstimateByLossId,
+  getEstimateLineItems,
+  updateEstimateArea,
+  updateEstimateLineItem,
+  updateEstimateStatus,
+  type CreateEstimateAreaInput,
+  type CreateEstimateLineItemInput,
+  type UpdateEstimateAreaInput,
+  type UpdateEstimateLineItemInput,
+} from "@/lib/database/estimateRepository";

@@ -7,6 +7,8 @@
  * - supabase/migrations/20260810020000_create_room_notes.sql
  * - supabase/migrations/20260810030000_create_equipment.sql
  * - supabase/migrations/20260810040000_add_loss_details_fields.sql
+ * - supabase/migrations/20260810050000_create_room_scope_items.sql
+ * - supabase/migrations/20260810060000_create_estimate_foundation.sql
  *
  * TODO: Future Digital Twin will organize photos by Building → Floor → Room → Wall.
  */
@@ -294,6 +296,172 @@ export type Database = {
           },
         ];
       };
+      room_scope_items: {
+        Row: {
+          id: string;
+          loss_id: string;
+          room_id: string;
+          description: string;
+          completed: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          loss_id: string;
+          room_id: string;
+          description: string;
+          completed?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          loss_id?: string;
+          room_id?: string;
+          description?: string;
+          completed?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "room_scope_items_loss_id_fkey";
+            columns: ["loss_id"];
+            isOneToOne: false;
+            referencedRelation: "losses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "room_scope_items_room_id_fkey";
+            columns: ["room_id"];
+            isOneToOne: false;
+            referencedRelation: "rooms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      estimates: {
+        Row: {
+          id: string;
+          loss_id: string;
+          status: "Draft" | "Complete";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          loss_id: string;
+          status?: "Draft" | "Complete";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          loss_id?: string;
+          status?: "Draft" | "Complete";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "estimates_loss_id_fkey";
+            columns: ["loss_id"];
+            isOneToOne: true;
+            referencedRelation: "losses";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      estimate_areas: {
+        Row: {
+          id: string;
+          estimate_id: string;
+          room_id: string | null;
+          name: string;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          estimate_id: string;
+          room_id?: string | null;
+          name: string;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          estimate_id?: string;
+          room_id?: string | null;
+          name?: string;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "estimate_areas_estimate_id_fkey";
+            columns: ["estimate_id"];
+            isOneToOne: false;
+            referencedRelation: "estimates";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "estimate_areas_room_id_fkey";
+            columns: ["room_id"];
+            isOneToOne: false;
+            referencedRelation: "rooms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      estimate_line_items: {
+        Row: {
+          id: string;
+          estimate_area_id: string;
+          description: string;
+          quantity: number;
+          unit: string;
+          unit_price: number;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          estimate_area_id: string;
+          description: string;
+          quantity?: number;
+          unit: string;
+          unit_price?: number;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          estimate_area_id?: string;
+          description?: string;
+          quantity?: number;
+          unit?: string;
+          unit_price?: number;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "estimate_line_items_estimate_area_id_fkey";
+            columns: ["estimate_area_id"];
+            isOneToOne: false;
+            referencedRelation: "estimate_areas";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -309,5 +477,12 @@ export type MoistureReadingRow =
   Database["public"]["Tables"]["moisture_readings"]["Row"];
 export type RoomNoteRow = Database["public"]["Tables"]["room_notes"]["Row"];
 export type EquipmentRow = Database["public"]["Tables"]["equipment"]["Row"];
+export type ScopeItemRow =
+  Database["public"]["Tables"]["room_scope_items"]["Row"];
+export type EstimateRow = Database["public"]["Tables"]["estimates"]["Row"];
+export type EstimateAreaRow =
+  Database["public"]["Tables"]["estimate_areas"]["Row"];
+export type EstimateLineItemRow =
+  Database["public"]["Tables"]["estimate_line_items"]["Row"];
 
 export const ROOM_PHOTOS_BUCKET = "room-photos" as const;
