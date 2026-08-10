@@ -103,6 +103,7 @@ export {
   getEstimateLineItems,
   updateEstimateArea,
   updateEstimateLineItem,
+  updateEstimateNotes,
   updateEstimateStatus,
   type CreateEstimateAreaInput,
   type CreateEstimateLineItemInput,

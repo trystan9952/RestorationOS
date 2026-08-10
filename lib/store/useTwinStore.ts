@@ -35,6 +35,7 @@ import {
   updateEquipmentStatus as persistEquipmentStatus,
   updateEstimateArea as persistEstimateAreaUpdate,
   updateEstimateLineItem as persistEstimateLineItemUpdate,
+  updateEstimateNotes as persistEstimateNotes,
   updateEstimateStatus as persistEstimateStatus,
   updateLoss as persistLossUpdate,
   updateLossStatus as persistLossStatus,
@@ -272,6 +273,10 @@ type TwinState = {
     }
   ) => Promise<EstimateLineItem>;
   deleteEstimateLineItem: (areaId: string, lineItemId: string) => Promise<void>;
+  updateEstimateNotes: (
+    estimateId: string,
+    notes: string | null
+  ) => Promise<Estimate>;
   updateEstimateStatus: (
     estimateId: string,
     status: EstimateStatus
@@ -1811,6 +1816,38 @@ export const useTwinStore = create<TwinState>((set, get) => ({
     } catch (error) {
       set({
         isDeletingEstimateLineItem: false,
+        estimateError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  updateEstimateNotes: async (estimateId, notes) => {
+    if (get().isUpdatingEstimate) {
+      throw new Error("Estimate is already being updated");
+    }
+
+    set({
+      isUpdatingEstimate: true,
+      estimateError: null,
+    });
+
+    try {
+      const estimate = await persistEstimateNotes(estimateId, notes);
+
+      set((state) => ({
+        estimateByLossId: {
+          ...state.estimateByLossId,
+          [estimate.lossId]: estimate,
+        },
+        isUpdatingEstimate: false,
+        estimateError: null,
+      }));
+
+      return estimate;
+    } catch (error) {
+      set({
+        isUpdatingEstimate: false,
         estimateError: getErrorMessage(error),
       });
       throw error;

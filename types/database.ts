@@ -360,6 +360,7 @@ export type Database = {
           id: string;
           loss_id: string;
           status: "Draft" | "Complete";
+          notes: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -367,6 +368,7 @@ export type Database = {
           id?: string;
           loss_id: string;
           status?: "Draft" | "Complete";
+          notes?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -374,6 +376,7 @@ export type Database = {
           id?: string;
           loss_id?: string;
           status?: "Draft" | "Complete";
+          notes?: string | null;
           created_at?: string;
           updated_at?: string;
         };

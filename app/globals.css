@@ -128,3 +128,34 @@
     @apply font-sans;
   }
 }
+
+/* Professional estimate document — browser print (no PDF library) */
+@media print {
+  @page {
+    margin: 0.6in;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .estimate-document {
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .estimate-area {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .estimate-document table {
+    break-inside: auto;
+  }
+
+  .estimate-document tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

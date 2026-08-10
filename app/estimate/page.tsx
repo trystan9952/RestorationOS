@@ -10,6 +10,8 @@ import { useTwinStore } from "@/lib/store/useTwinStore";
 
 const ACTIVE_LOSS_STORAGE_KEY = "restorationos.activeLossId";
 
+type EstimateViewMode = "edit" | "preview";
+
 function readStoredLossId(): string | null {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(ACTIVE_LOSS_STORAGE_KEY);
@@ -40,6 +42,7 @@ export default function EstimatePage() {
   const error = useTwinStore((state) => state.error);
 
   const [ready, setReady] = useState(false);
+  const [viewMode, setViewMode] = useState<EstimateViewMode>("edit");
 
   useEffect(() => {
     void (async () => {
@@ -126,7 +129,7 @@ export default function EstimatePage() {
 
   if (!ready || status === "loading" || estimateStatus === "loading") {
     return (
-      <main className="min-h-screen bg-slate-950 p-6 text-white md:p-8">
+      <main className="min-h-screen bg-slate-950 p-6 text-white md:p-8 print:bg-white print:text-black">
         <div className="mx-auto max-w-6xl">
           <Header title="Estimate" subtitle="Loading..." />
           <p className="mt-6 text-slate-400">Loading estimate...</p>
@@ -176,25 +179,72 @@ export default function EstimatePage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 p-6 text-white md:p-8">
-      <div className="mx-auto max-w-6xl">
+    <main className="min-h-screen bg-slate-950 p-6 text-white md:p-8 print:bg-white print:p-0 print:text-black">
+      <div className="mx-auto max-w-6xl print:max-w-none">
         <Link
           href="/dashboard"
-          className="mb-6 inline-block text-blue-400 hover:text-blue-300"
+          className="mb-6 inline-block text-blue-400 hover:text-blue-300 print:hidden"
         >
           ← Dashboard
         </Link>
 
-        <Header
-          title="Estimate"
-          subtitle="Build areas and line items for this loss"
-        />
+        <div className="print:hidden">
+          <Header
+            title="Estimate"
+            subtitle="Build and preview the estimate for this loss"
+          />
+        </div>
 
-        <div className="mt-6">
+        {/* Top-level Edit / Preview / Print — owned by the page so it cannot be buried */}
+        <div className="print:hidden mt-6 flex flex-col gap-3 rounded-xl border border-slate-700 bg-slate-900 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div
+            className="inline-flex w-full rounded-lg border border-slate-600 bg-slate-950 p-1 sm:w-auto"
+            role="group"
+            aria-label="Estimate view mode"
+          >
+            <button
+              type="button"
+              onClick={() => setViewMode("edit")}
+              aria-pressed={viewMode === "edit"}
+              className={`min-h-11 flex-1 rounded-md px-5 py-2.5 text-sm font-semibold transition sm:flex-none ${
+                viewMode === "edit"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-200 hover:bg-slate-800"
+              }`}
+            >
+              Edit Estimate
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("preview")}
+              aria-pressed={viewMode === "preview"}
+              className={`min-h-11 flex-1 rounded-md px-5 py-2.5 text-sm font-semibold transition sm:flex-none ${
+                viewMode === "preview"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-200 hover:bg-slate-800"
+              }`}
+            >
+              Preview Estimate
+            </button>
+          </div>
+
+          {viewMode === "preview" ? (
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="min-h-11 rounded-lg border border-slate-500 bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700"
+            >
+              Print
+            </button>
+          ) : null}
+        </div>
+
+        <div className="mt-6 print:mt-0">
           <EstimateWorkspace
             loss={activeLoss}
             estimate={estimate}
             rooms={rooms}
+            viewMode={viewMode}
           />
         </div>
       </div>

@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { CatalogItemPicker } from "@/components/estimate/CatalogItemPicker";
+import { EstimateDocumentPreview } from "@/components/estimate/EstimateDocumentPreview";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -36,6 +37,10 @@ import {
   getRoomQuantitySourceValue,
 } from "@/lib/utils/estimateQuantitySource";
 import {
+  formatEstimateDate,
+  formatEstimateNumber,
+} from "@/lib/utils/estimateDocument";
+import {
   calculateAreaTotal,
   calculateEstimateTotal,
   calculateLineItemTotal,
@@ -48,10 +53,14 @@ const EMPTY_LINE_ITEMS: EstimateLineItem[] = [];
 
 const COMMON_UNITS = ["SF", "LF", "EA", "HR", "SY", "LS"] as const;
 
+type EstimateViewMode = "edit" | "preview";
+
 type EstimateWorkspaceProps = {
   loss: Loss;
   estimate: Estimate;
   rooms: Room[];
+  /** Controlled by /estimate page so mode toggle stays at the top of the route. */
+  viewMode: EstimateViewMode;
 };
 
 type LineItemFormState = {
@@ -112,7 +121,9 @@ export function EstimateWorkspace({
   loss,
   estimate,
   rooms,
+  viewMode,
 }: EstimateWorkspaceProps) {
+  const estimateNotes = estimate.notes ?? null;
   const areasForEstimate = useTwinStore(
     (state) => state.estimateAreasByEstimateId[estimate.id]
   );
@@ -153,7 +164,13 @@ export function EstimateWorkspace({
   const updateEstimateStatus = useTwinStore(
     (state) => state.updateEstimateStatus
   );
+  const updateEstimateNotes = useTwinStore(
+    (state) => state.updateEstimateNotes
+  );
   const clearEstimateError = useTwinStore((state) => state.clearEstimateError);
+
+  const [notesDraft, setNotesDraft] = useState(estimateNotes ?? "");
+  const [notesSaveMessage, setNotesSaveMessage] = useState<string | null>(null);
 
   const [isAddRoomOpen, setIsAddRoomOpen] = useState(false);
   const [isCustomAreaOpen, setIsCustomAreaOpen] = useState(false);
@@ -179,6 +196,10 @@ export function EstimateWorkspace({
   const [deleteLineItemTarget, setDeleteLineItemTarget] =
     useState<EstimateLineItem | null>(null);
   const [isCatalogPickerOpen, setIsCatalogPickerOpen] = useState(false);
+
+  useEffect(() => {
+    setNotesDraft(estimateNotes ?? "");
+  }, [estimate.id, estimateNotes]);
 
   const availableRooms = useMemo(() => {
     const linkedRoomIds = new Set(
@@ -242,6 +263,22 @@ export function EstimateWorkspace({
     clearEstimateError();
     try {
       await updateEstimateStatus(estimate.id, nextStatus);
+    } catch {
+      // estimateError is set in the store
+    }
+  }
+
+  async function handleSaveNotes() {
+    if (isUpdatingEstimate) {
+      return;
+    }
+
+    clearEstimateError();
+    setNotesSaveMessage(null);
+
+    try {
+      await updateEstimateNotes(estimate.id, notesDraft);
+      setNotesSaveMessage("Notes saved.");
     } catch {
       // estimateError is set in the store
     }
@@ -549,34 +586,59 @@ export function EstimateWorkspace({
   return (
     <div className="grid gap-6">
       {estimateError ? (
-        <p className="rounded-lg border border-red-800 bg-red-950/50 px-3 py-2 text-sm text-red-300">
+        <p className="print:hidden rounded-lg border border-red-800 bg-red-950/50 px-3 py-2 text-sm text-red-300">
           {estimateError}
         </p>
       ) : null}
 
+      {viewMode === "preview" ? (
+        <EstimateDocumentPreview
+          loss={loss}
+          estimate={{ ...estimate, notes: estimateNotes }}
+          areas={areas}
+          lineItemsByAreaId={lineItemsByAreaId}
+          rooms={rooms}
+        />
+      ) : (
+        <>
       <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-400">
-              Estimate
+              RestorationOS
             </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight">
-              {loss.address?.trim() || "No address yet"}
-            </h2>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight">Estimate</h2>
             <p className="mt-2 text-xl text-slate-200">
+              {loss.address?.trim() || "No address yet"}
+            </p>
+            <p className="mt-1 text-lg text-slate-300">
               {loss.customer?.trim() || "No customer yet"}
             </p>
-            <p className="mt-3 text-slate-400">
-              Claim Number:{" "}
-              <span className="text-slate-200">
-                {loss.claimNumber?.trim() || "—"}
-              </span>
-            </p>
+            <dl className="mt-4 grid gap-2 text-sm text-slate-400 sm:grid-cols-2">
+              <div>
+                <dt className="inline text-slate-500">Estimate #: </dt>
+                <dd className="inline text-slate-200">
+                  {formatEstimateNumber(estimate.id)}
+                </dd>
+              </div>
+              <div>
+                <dt className="inline text-slate-500">Estimate Date: </dt>
+                <dd className="inline text-slate-200">
+                  {formatEstimateDate(estimate.createdAt)}
+                </dd>
+              </div>
+              <div>
+                <dt className="inline text-slate-500">Claim Number: </dt>
+                <dd className="inline text-slate-200">
+                  {loss.claimNumber?.trim() || "—"}
+                </dd>
+              </div>
+            </dl>
           </div>
 
           <div className="w-full shrink-0 rounded-lg border border-slate-700 bg-slate-950/50 p-4 lg:w-64">
             <p className="text-xs uppercase tracking-wide text-slate-500">
-              Status
+              Estimate Status
             </p>
             <p className="mt-2 text-2xl font-semibold text-yellow-400">
               {estimate.status}
@@ -606,6 +668,44 @@ export function EstimateWorkspace({
               <p className="mt-2 text-xs text-slate-500">Saving...</p>
             ) : null}
           </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-blue-900/50 bg-slate-900 p-6">
+        <h2 className="text-2xl font-bold">Estimate Notes</h2>
+        <p className="mt-2 text-sm text-slate-400">
+          Notes appear on the estimate preview when saved. These are not room
+          notes.
+        </p>
+        <label
+          htmlFor="estimate-notes"
+          className="mt-4 mb-1 block text-sm text-slate-300"
+        >
+          Notes
+        </label>
+        <textarea
+          id="estimate-notes"
+          value={notesDraft}
+          onChange={(event) => {
+            setNotesDraft(event.target.value);
+            setNotesSaveMessage(null);
+          }}
+          rows={5}
+          placeholder="Add estimate-level notes for the customer or adjuster..."
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-blue-500"
+        />
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void handleSaveNotes()}
+            disabled={isUpdatingEstimate}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-500 disabled:opacity-60"
+          >
+            {isUpdatingEstimate ? "Saving..." : "Save Notes"}
+          </button>
+          {notesSaveMessage ? (
+            <p className="text-sm text-emerald-400">{notesSaveMessage}</p>
+          ) : null}
         </div>
       </section>
 
@@ -872,7 +972,7 @@ export function EstimateWorkspace({
 
         <div className="mt-6 flex justify-end border-t border-slate-800 pt-4">
           <p className="text-lg font-semibold">
-            Estimate Total:{" "}
+            Estimate Subtotal:{" "}
             <span className="text-yellow-400">
               {formatCurrency(estimateTotal)}
             </span>
@@ -1270,6 +1370,8 @@ export function EstimateWorkspace({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </>
+      )}
     </div>
   );
 }

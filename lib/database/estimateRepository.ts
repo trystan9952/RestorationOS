@@ -53,10 +53,15 @@ export type UpdateEstimateLineItemInput = {
 };
 
 function mapEstimateRow(row: EstimateRow): Estimate {
+  const rawNotes = row.notes;
   return {
     id: row.id,
     lossId: row.loss_id,
     status: row.status as EstimateStatus,
+    notes:
+      typeof rawNotes === "string" && rawNotes.trim().length > 0
+        ? rawNotes
+        : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -142,6 +147,28 @@ export async function updateEstimateStatus(
       .from("estimates")
       .update({
         status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", estimateId)
+      .select("*")
+      .single()
+  );
+
+  return mapEstimateRow(data);
+}
+
+export async function updateEstimateNotes(
+  estimateId: string,
+  notes: string | null
+): Promise<Estimate> {
+  const supabase = getSupabaseClient();
+  const trimmed = notes?.trim() ?? "";
+
+  const data = unwrapSingle(
+    await supabase
+      .from("estimates")
+      .update({
+        notes: trimmed.length > 0 ? trimmed : null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", estimateId)

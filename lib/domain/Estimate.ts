@@ -12,6 +12,8 @@ export interface Estimate {
   id: string;
   lossId: string;
   status: EstimateStatus;
+  /** Estimate-level notes (not room notes). Null when empty. */
+  notes: string | null;
   createdAt: string;
   updatedAt: string;
 }
