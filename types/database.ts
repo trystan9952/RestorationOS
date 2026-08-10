@@ -4,6 +4,7 @@
  * - supabase/migrations/20260322000000_create_losses_rooms.sql
  * - supabase/migrations/20260810000000_create_photos_and_room_photos_bucket.sql
  * - supabase/migrations/20260810010000_create_moisture_readings.sql
+ * - supabase/migrations/20260810020000_create_room_notes.sql
  *
  * TODO: Future Digital Twin will organize photos by Building → Floor → Room → Wall.
  */
@@ -189,6 +190,48 @@ export type Database = {
           },
         ];
       };
+      room_notes: {
+        Row: {
+          id: string;
+          loss_id: string;
+          room_id: string;
+          note: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          loss_id: string;
+          room_id: string;
+          note: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          loss_id?: string;
+          room_id?: string;
+          note?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "room_notes_loss_id_fkey";
+            columns: ["loss_id"];
+            isOneToOne: false;
+            referencedRelation: "losses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "room_notes_room_id_fkey";
+            columns: ["room_id"];
+            isOneToOne: false;
+            referencedRelation: "rooms";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -202,5 +245,6 @@ export type RoomRow = Database["public"]["Tables"]["rooms"]["Row"];
 export type PhotoRow = Database["public"]["Tables"]["photos"]["Row"];
 export type MoistureReadingRow =
   Database["public"]["Tables"]["moisture_readings"]["Row"];
+export type RoomNoteRow = Database["public"]["Tables"]["room_notes"]["Row"];
 
 export const ROOM_PHOTOS_BUCKET = "room-photos" as const;

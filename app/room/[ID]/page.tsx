@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 
 import { Header } from "@/components/layout/Header";
 import { MoistureReadings } from "@/components/moisture/MoistureReadings";
+import { RoomNotes } from "@/components/notes/RoomNotes";
 import { PhotoUploader } from "@/components/photos/PhotoUploader";
 import { useTwinStore } from "@/lib/store/useTwinStore";
 
@@ -18,6 +19,7 @@ export default function RoomPage() {
   const loadMoistureReadings = useTwinStore(
     (state) => state.loadMoistureReadings
   );
+  const loadRoomNotes = useTwinStore((state) => state.loadRoomNotes);
   const room = useTwinStore((state) =>
     state.rooms.find((item) => item.id === roomId)
   );
@@ -29,10 +31,17 @@ export default function RoomPage() {
         await Promise.all([
           loadRoomPhotos(roomId),
           loadMoistureReadings(roomId),
+          loadRoomNotes(roomId),
         ]);
       }
     })();
-  }, [hydrateFromDatabase, loadMoistureReadings, loadRoomPhotos, roomId]);
+  }, [
+    hydrateFromDatabase,
+    loadMoistureReadings,
+    loadRoomNotes,
+    loadRoomPhotos,
+    roomId,
+  ]);
 
   const title = room?.name ?? "Room not found";
   const subtitle = room
@@ -62,11 +71,7 @@ export default function RoomPage() {
               </div>
 
               <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-                <h2 className="text-xl font-bold">📝 Notes</h2>
-                <textarea
-                  className="mt-4 h-40 w-full rounded-lg border border-slate-700 bg-slate-800 p-3 outline-none"
-                  placeholder="Inspection notes..."
-                />
+                <RoomNotes roomId={roomId} />
               </div>
             </div>
           </div>

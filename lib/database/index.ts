@@ -69,3 +69,9 @@ export {
   type CreateRoomInput,
   type UpdateRoomInput,
 } from "@/lib/database/roomRepository";
+
+export {
+  createRoomNote,
+  getRoomNotes,
+  type CreateRoomNoteInput,
+} from "@/lib/database/roomNoteRepository";

@@ -7,6 +7,7 @@ export type {
   LossRow,
   MoistureReadingRow,
   PhotoRow,
+  RoomNoteRow,
   RoomRow,
 } from "@/types/database";
 export { ROOM_PHOTOS_BUCKET } from "@/types/database";

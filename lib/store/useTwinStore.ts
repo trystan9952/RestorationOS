@@ -4,10 +4,12 @@ import {
   createLoss,
   createMoistureReading,
   createRoom,
+  createRoomNote,
   deleteRoom as removePersistedRoom,
   getLoss,
   getMoistureReadings,
   getPhotos,
+  getRoomNotes,
   getRooms,
   updateRoom as persistRoomUpdate,
   uploadRoomPhoto,
@@ -20,6 +22,7 @@ import type { Loss } from "@/lib/domain/Loss";
 import type { MoistureReading } from "@/lib/domain/MoistureReading";
 import type { Photo } from "@/lib/domain/Photo";
 import type { Room } from "@/lib/domain/Room";
+import type { RoomNote } from "@/lib/domain/RoomNote";
 import { runAsyncAction } from "@/lib/store/async";
 import type { AsyncStatus } from "@/types";
 
@@ -42,6 +45,11 @@ type TwinState = {
   moistureByRoomId: Record<string, MoistureReading[]>;
   moistureError: string | null;
   isSavingMoisture: boolean;
+
+  /** Frontend cache of persisted room notes, keyed by room id. */
+  notesByRoomId: Record<string, RoomNote[]>;
+  noteError: string | null;
+  isSavingNote: boolean;
 
   activeLossId: string | null;
   activeLoss: Loss | null;
@@ -74,6 +82,10 @@ type TwinState = {
     location: string;
   }) => Promise<MoistureReading>;
   clearMoistureError: () => void;
+
+  loadRoomNotes: (roomId: string) => Promise<RoomNote[]>;
+  saveRoomNote: (roomId: string, note: string) => Promise<RoomNote>;
+  clearNoteError: () => void;
 
   setActiveLossId: (lossId: string | null) => void;
   clearError: () => void;
@@ -157,6 +169,10 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   moistureError: null,
   isSavingMoisture: false,
 
+  notesByRoomId: {},
+  noteError: null,
+  isSavingNote: false,
+
   activeLossId: null,
   activeLoss: null,
 
@@ -177,6 +193,8 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   clearPhotoError: () => set({ photoError: null, photoStatus: "idle" }),
 
   clearMoistureError: () => set({ moistureError: null }),
+
+  clearNoteError: () => set({ noteError: null }),
 
   hydrateFromDatabase: async () =>
     runAsyncAction(set, async () => {
@@ -337,6 +355,76 @@ export const useTwinStore = create<TwinState>((set, get) => ({
       set({
         isSavingMoisture: false,
         moistureError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  loadRoomNotes: async (roomId) => {
+    set({ noteError: null });
+
+    try {
+      const notes = await getRoomNotes(roomId);
+
+      set((state) => ({
+        notesByRoomId: {
+          ...state.notesByRoomId,
+          [roomId]: notes,
+        },
+        noteError: null,
+      }));
+
+      return notes;
+    } catch (error) {
+      set({
+        noteError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  saveRoomNote: async (roomId, note) => {
+    if (get().isSavingNote) {
+      throw new Error("A room note is already being saved");
+    }
+
+    const trimmed = note.trim();
+    if (!trimmed) {
+      const message = "Note cannot be empty.";
+      set({ noteError: message });
+      throw new Error(message);
+    }
+
+    set({
+      isSavingNote: true,
+      noteError: null,
+    });
+
+    try {
+      const lossId = await ensureActiveLossId(get, set);
+
+      await createRoomNote({
+        lossId,
+        roomId,
+        note: trimmed,
+      });
+
+      const notes = await getRoomNotes(roomId);
+
+      set((state) => ({
+        notesByRoomId: {
+          ...state.notesByRoomId,
+          [roomId]: notes,
+        },
+        isSavingNote: false,
+        noteError: null,
+      }));
+
+      return notes[0]!;
+    } catch (error) {
+      set({
+        isSavingNote: false,
+        noteError: getErrorMessage(error),
       });
       throw error;
     }
