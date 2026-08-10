@@ -1,53 +1,19 @@
 "use client";
 
-import type { Estimate } from "@/lib/domain/Estimate";
-import type { EstimateArea } from "@/lib/domain/EstimateArea";
-import type { EstimateLineItem } from "@/lib/domain/EstimateLineItem";
-import { formatQuantitySourceLabel } from "@/lib/domain/EstimateQuantitySource";
-import type { Loss } from "@/lib/domain/Loss";
-import type { Room } from "@/lib/domain/Room";
-import {
-  displayField,
-  formatEstimateDate,
-  formatEstimateNumber,
-  formatLossDate,
-} from "@/lib/utils/estimateDocument";
-import {
-  calculateAreaTotal,
-  calculateEstimateTotal,
-  calculateLineItemTotal,
-  formatCurrency,
-} from "@/lib/utils/estimateTotals";
-
-const EMPTY_LINE_ITEMS: EstimateLineItem[] = [];
+import type { EstimateDocumentData } from "@/lib/utils/estimateDocument";
+import { displayField } from "@/lib/utils/estimateDocument";
+import { formatCurrency } from "@/lib/utils/estimateTotals";
 
 type EstimateDocumentPreviewProps = {
-  loss: Loss;
-  estimate: Estimate;
-  areas: EstimateArea[];
-  lineItemsByAreaId: Record<string, EstimateLineItem[]>;
-  rooms: Room[];
+  document: EstimateDocumentData;
 };
 
-function areaKindLabel(area: EstimateArea, rooms: Room[]): string {
-  if (!area.roomId) {
-    return "Custom Area";
-  }
-  const room = rooms.find((entry) => entry.id === area.roomId);
-  return room?.name?.trim() || area.name;
-}
-
 export function EstimateDocumentPreview({
-  loss,
-  estimate,
-  areas,
-  lineItemsByAreaId,
-  rooms,
+  document,
 }: EstimateDocumentPreviewProps) {
-  const estimateTotal = calculateEstimateTotal(
-    areas.map((area) => lineItemsByAreaId[area.id] ?? EMPTY_LINE_ITEMS)
-  );
+  const { company, estimate, loss, areas, totals } = document;
   const notes = estimate.notes?.trim() ?? "";
+  const showLogo = Boolean(company.logoUrl?.trim());
 
   return (
     <article
@@ -55,10 +21,29 @@ export function EstimateDocumentPreview({
       aria-label="Estimate preview"
     >
       <div className="border-b border-slate-300 px-6 py-8 sm:px-10">
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
-          RestorationOS
-        </p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+          {showLogo ? (
+            // eslint-disable-next-line @next/next/no-img-element -- external Supabase logo URL
+            <img
+              src={company.logoUrl!}
+              alt={`${company.name} logo`}
+              className="h-16 w-16 object-contain"
+            />
+          ) : null}
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
+              {company.name}
+            </p>
+            <div className="mt-2 space-y-1 text-sm text-slate-600">
+              {company.phone ? <p>{company.phone}</p> : null}
+              {company.email ? <p>{company.email}</p> : null}
+              {company.website ? <p>{company.website}</p> : null}
+              {company.address ? <p>{company.address}</p> : null}
+            </div>
+          </div>
+        </div>
+
+        <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-900">
           Estimate
         </h1>
 
@@ -71,14 +56,12 @@ export function EstimateDocumentPreview({
           </div>
           <div>
             <dt className="text-slate-500">Estimate Date</dt>
-            <dd className="mt-1 font-medium text-slate-900">
-              {formatEstimateDate(estimate.createdAt)}
-            </dd>
+            <dd className="mt-1 font-medium text-slate-900">{estimate.date}</dd>
           </div>
           <div>
             <dt className="text-slate-500">Estimate #</dt>
             <dd className="mt-1 font-medium tabular-nums text-slate-900">
-              {formatEstimateNumber(estimate.id)}
+              {estimate.estimateNumber}
             </dd>
           </div>
         </dl>
@@ -117,11 +100,7 @@ export function EstimateDocumentPreview({
           </div>
           <div>
             <dt className="text-slate-500">Date of Loss</dt>
-            <dd className="mt-1 font-medium">
-              {loss.dateOfLoss?.trim()
-                ? formatLossDate(loss.dateOfLoss)
-                : "—"}
-            </dd>
+            <dd className="mt-1 font-medium">{displayField(loss.dateOfLoss)}</dd>
           </div>
         </dl>
       </section>
@@ -137,105 +116,94 @@ export function EstimateDocumentPreview({
           </p>
         ) : (
           <div className="mt-6 grid gap-8">
-            {areas.map((area) => {
-              const lineItems =
-                lineItemsByAreaId[area.id] ?? EMPTY_LINE_ITEMS;
-              const areaTotal = calculateAreaTotal(lineItems);
-
-              return (
-                <section
-                  key={area.id}
-                  className="estimate-area border border-slate-200"
-                >
-                  <header className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                    <h3 className="text-lg font-semibold text-slate-900">
-                      {area.name}
-                    </h3>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {area.roomId ? (
-                        <>
-                          Room:{" "}
-                          <span className="font-medium text-slate-800">
-                            {areaKindLabel(area, rooms)}
-                          </span>
-                        </>
-                      ) : (
+            {areas.map((area) => (
+              <section
+                key={area.id}
+                className="estimate-area border border-slate-200"
+              >
+                <header className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    {area.name}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {area.roomId ? (
+                      <>
+                        Room:{" "}
                         <span className="font-medium text-slate-800">
-                          Custom Area
+                          {area.roomLabel}
                         </span>
-                      )}
-                    </p>
-                  </header>
-
-                  {lineItems.length === 0 ? (
-                    <p className="px-4 py-6 text-sm text-slate-600">
-                      No line items.
-                    </p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-200 text-slate-600">
-                            <th className="px-4 py-3 font-semibold">
-                              Description
-                            </th>
-                            <th className="px-4 py-3 font-semibold">
-                              Quantity
-                            </th>
-                            <th className="px-4 py-3 font-semibold">Unit</th>
-                            <th className="px-4 py-3 font-semibold">
-                              Unit Price
-                            </th>
-                            <th className="px-4 py-3 text-right font-semibold">
-                              Total
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {lineItems.map((item) => (
-                            <tr
-                              key={item.id}
-                              className="border-b border-slate-100 align-top"
-                            >
-                              <td className="px-4 py-3 font-medium text-slate-900">
-                                {item.description}
-                              </td>
-                              <td className="px-4 py-3 tabular-nums text-slate-900">
-                                <div>{item.quantity}</div>
-                                <div className="mt-1 text-xs font-normal text-slate-500">
-                                  Source:{" "}
-                                  {formatQuantitySourceLabel(
-                                    item.quantitySource ?? "manual"
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-slate-800">
-                                {item.unit}
-                              </td>
-                              <td className="px-4 py-3 tabular-nums text-slate-800">
-                                {formatCurrency(item.unitPrice)}
-                              </td>
-                              <td className="px-4 py-3 text-right tabular-nums font-medium text-slate-900">
-                                {formatCurrency(calculateLineItemTotal(item))}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  <div className="flex justify-end border-t border-slate-200 px-4 py-3">
-                    <p className="text-sm text-slate-700">
-                      Area Subtotal:{" "}
-                      <span className="font-semibold tabular-nums text-slate-900">
-                        {formatCurrency(areaTotal)}
+                      </>
+                    ) : (
+                      <span className="font-medium text-slate-800">
+                        Custom Area
                       </span>
-                    </p>
+                    )}
+                  </p>
+                </header>
+
+                {area.lineItems.length === 0 ? (
+                  <p className="px-4 py-6 text-sm text-slate-600">
+                    No line items.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-600">
+                          <th className="px-4 py-3 font-semibold">
+                            Description
+                          </th>
+                          <th className="px-4 py-3 font-semibold">Quantity</th>
+                          <th className="px-4 py-3 font-semibold">Unit</th>
+                          <th className="px-4 py-3 font-semibold">
+                            Unit Price
+                          </th>
+                          <th className="px-4 py-3 text-right font-semibold">
+                            Total
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {area.lineItems.map((item) => (
+                          <tr
+                            key={item.id}
+                            className="border-b border-slate-100 align-top"
+                          >
+                            <td className="px-4 py-3 font-medium text-slate-900">
+                              {item.description}
+                            </td>
+                            <td className="px-4 py-3 tabular-nums text-slate-900">
+                              <div>{item.quantity}</div>
+                              <div className="mt-1 text-xs font-normal text-slate-500">
+                                Source: {item.quantitySourceLabel}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-slate-800">
+                              {item.unit}
+                            </td>
+                            <td className="px-4 py-3 tabular-nums text-slate-800">
+                              {formatCurrency(item.unitPrice)}
+                            </td>
+                            <td className="px-4 py-3 text-right tabular-nums font-medium text-slate-900">
+                              {formatCurrency(item.total)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                </section>
-              );
-            })}
+                )}
+
+                <div className="flex justify-end border-t border-slate-200 px-4 py-3">
+                  <p className="text-sm text-slate-700">
+                    Area Subtotal:{" "}
+                    <span className="font-semibold tabular-nums text-slate-900">
+                      {formatCurrency(area.subtotal)}
+                    </span>
+                  </p>
+                </div>
+              </section>
+            ))}
           </div>
         )}
 
@@ -243,7 +211,7 @@ export function EstimateDocumentPreview({
           <p className="text-base font-semibold text-slate-900">
             Estimate Subtotal:{" "}
             <span className="tabular-nums">
-              {formatCurrency(estimateTotal)}
+              {formatCurrency(totals.subtotal)}
             </span>
           </p>
         </div>

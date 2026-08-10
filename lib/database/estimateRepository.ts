@@ -119,6 +119,22 @@ export async function getEstimateByLossId(
   return data ? mapEstimateRow(data) : null;
 }
 
+export async function getEstimateById(
+  estimateId: string
+): Promise<Estimate | null> {
+  const supabase = getSupabaseClient();
+
+  const data = unwrapQuery(
+    await supabase
+      .from("estimates")
+      .select("*")
+      .eq("id", estimateId)
+      .maybeSingle()
+  );
+
+  return data ? mapEstimateRow(data) : null;
+}
+
 export async function createEstimate(lossId: string): Promise<Estimate> {
   const supabase = getSupabaseClient();
 

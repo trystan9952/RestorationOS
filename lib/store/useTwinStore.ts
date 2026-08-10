@@ -12,6 +12,7 @@ import {
   createPriceCatalogItem as persistCreatePriceCatalogItem,
   createRoomMeasurement,
   createScopeItem,
+  deleteCompanyLogo as persistDeleteCompanyLogo,
   deleteEstimateArea as removePersistedEstimateArea,
   deleteEstimateLineItem as removePersistedEstimateLineItem,
   deleteRoom as removePersistedRoom,
@@ -25,13 +26,16 @@ import {
   getLoss,
   getLosses,
   getMoistureReadings,
+  getOrCreateCompanyProfile,
   getPhotos,
   getPriceCatalogItems,
   getRoomMeasurement,
   getRoomNotes,
   getRooms,
   getScopeItems,
+  saveCompanyProfile as persistSaveCompanyProfile,
   setPriceCatalogItemActive as persistSetPriceCatalogItemActive,
+  uploadCompanyLogo as persistUploadCompanyLogo,
   updateEquipmentStatus as persistEquipmentStatus,
   updateEstimateArea as persistEstimateAreaUpdate,
   updateEstimateLineItem as persistEstimateLineItemUpdate,
@@ -51,6 +55,10 @@ import {
   type UpdateRoomInput,
 } from "@/lib/database";
 import { getErrorMessage } from "@/lib/database/errors";
+import type {
+  CompanyProfile,
+  CompanyProfileInput,
+} from "@/lib/domain/CompanyProfile";
 import type { Equipment, EquipmentStatus } from "@/lib/domain/Equipment";
 import type { Estimate, EstimateStatus } from "@/lib/domain/Estimate";
 import type { EstimateArea } from "@/lib/domain/EstimateArea";
@@ -136,6 +144,16 @@ type TwinState = {
   priceCatalogStatus: AsyncStatus;
   priceCatalogError: string | null;
   isSavingPriceCatalog: boolean;
+
+  /**
+   * Global company branding profile (not tied to active loss).
+   * Do not clear when switching jobs.
+   */
+  companyProfile: CompanyProfile | null;
+  companyProfileStatus: AsyncStatus;
+  companyProfileError: string | null;
+  isSavingCompanyProfile: boolean;
+  isUploadingCompanyLogo: boolean;
 
   activeLossId: string | null;
   activeLoss: Loss | null;
@@ -310,6 +328,12 @@ type TwinState = {
   deletePriceCatalogItem: (id: string) => Promise<void>;
   clearPriceCatalogError: () => void;
 
+  loadCompanyProfile: () => Promise<CompanyProfile>;
+  saveCompanyProfile: (input: CompanyProfileInput) => Promise<CompanyProfile>;
+  uploadCompanyLogo: (file: File) => Promise<CompanyProfile>;
+  deleteCompanyLogo: () => Promise<CompanyProfile>;
+  clearCompanyProfileError: () => void;
+
   setActiveLossId: (lossId: string | null) => void;
   clearError: () => void;
   clearLossError: () => void;
@@ -457,6 +481,12 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   priceCatalogError: null,
   isSavingPriceCatalog: false,
 
+  companyProfile: null,
+  companyProfileStatus: "idle",
+  companyProfileError: null,
+  isSavingCompanyProfile: false,
+  isUploadingCompanyLogo: false,
+
   activeLossId: null,
   activeLoss: null,
   isUpdatingLossStatus: false,
@@ -503,6 +533,9 @@ export const useTwinStore = create<TwinState>((set, get) => ({
 
   clearPriceCatalogError: () =>
     set({ priceCatalogError: null, priceCatalogStatus: "idle" }),
+
+  clearCompanyProfileError: () =>
+    set({ companyProfileError: null, companyProfileStatus: "idle" }),
 
   hydrateFromDatabase: async () =>
     runAsyncAction(set, async () => {
@@ -2052,6 +2085,118 @@ export const useTwinStore = create<TwinState>((set, get) => ({
       set({
         isSavingPriceCatalog: false,
         priceCatalogError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  loadCompanyProfile: async () => {
+    set({ companyProfileStatus: "loading", companyProfileError: null });
+
+    try {
+      const profile = await getOrCreateCompanyProfile();
+
+      set({
+        companyProfile: profile,
+        companyProfileStatus: "idle",
+        companyProfileError: null,
+      });
+
+      return profile;
+    } catch (error) {
+      set({
+        companyProfileStatus: "error",
+        companyProfileError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  saveCompanyProfile: async (input) => {
+    if (get().isSavingCompanyProfile) {
+      throw new Error("Company profile is already being saved");
+    }
+
+    set({
+      isSavingCompanyProfile: true,
+      companyProfileError: null,
+    });
+
+    try {
+      const profile = await persistSaveCompanyProfile(input);
+
+      set({
+        companyProfile: profile,
+        isSavingCompanyProfile: false,
+        companyProfileError: null,
+        companyProfileStatus: "idle",
+      });
+
+      return profile;
+    } catch (error) {
+      set({
+        isSavingCompanyProfile: false,
+        companyProfileError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  uploadCompanyLogo: async (file) => {
+    if (get().isUploadingCompanyLogo) {
+      throw new Error("A company logo is already being uploaded");
+    }
+
+    set({
+      isUploadingCompanyLogo: true,
+      companyProfileError: null,
+    });
+
+    try {
+      const profile = await persistUploadCompanyLogo(file);
+
+      set({
+        companyProfile: profile,
+        isUploadingCompanyLogo: false,
+        companyProfileError: null,
+        companyProfileStatus: "idle",
+      });
+
+      return profile;
+    } catch (error) {
+      set({
+        isUploadingCompanyLogo: false,
+        companyProfileError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  deleteCompanyLogo: async () => {
+    if (get().isUploadingCompanyLogo || get().isSavingCompanyProfile) {
+      throw new Error("Company profile is already being updated");
+    }
+
+    set({
+      isSavingCompanyProfile: true,
+      companyProfileError: null,
+    });
+
+    try {
+      const profile = await persistDeleteCompanyLogo();
+
+      set({
+        companyProfile: profile,
+        isSavingCompanyProfile: false,
+        companyProfileError: null,
+        companyProfileStatus: "idle",
+      });
+
+      return profile;
+    } catch (error) {
+      set({
+        isSavingCompanyProfile: false,
+        companyProfileError: getErrorMessage(error),
       });
       throw error;
     }

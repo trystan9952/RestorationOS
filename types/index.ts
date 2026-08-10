@@ -19,4 +19,4 @@ export type {
   RoomRow,
   ScopeItemRow,
 } from "@/types/database";
-export { ROOM_PHOTOS_BUCKET } from "@/types/database";
+export { COMPANY_ASSETS_BUCKET, ROOM_PHOTOS_BUCKET } from "@/types/database";

@@ -137,6 +137,12 @@ export default function Home() {
 
           <div className="flex flex-wrap gap-2">
             <Link
+              href="/settings"
+              className="inline-flex items-center justify-center rounded-lg border border-slate-600 px-5 py-3 text-sm font-semibold hover:bg-slate-800"
+            >
+              Settings
+            </Link>
+            <Link
               href="/price-catalog"
               className="inline-flex items-center justify-center rounded-lg border border-slate-600 px-5 py-3 text-sm font-semibold hover:bg-slate-800"
             >

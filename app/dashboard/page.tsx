@@ -224,6 +224,12 @@ export default function DashboardPage() {
                 >
                   Price Catalog
                 </Link>
+                <Link
+                  href="/settings"
+                  className="rounded-lg border border-slate-600 px-3 py-1.5 text-sm hover:bg-slate-800"
+                >
+                  Settings
+                </Link>
                 <button
                   type="button"
                   onClick={() => {

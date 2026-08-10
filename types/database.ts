@@ -13,6 +13,8 @@
  * - supabase/migrations/20260810080000_add_quantity_source_to_estimate_line_items.sql
  * - supabase/migrations/20260810090000_create_price_catalog.sql
  * - supabase/migrations/20260810100000_add_estimate_line_item_id_to_room_scope_items.sql
+ * - supabase/migrations/20260810110000_add_estimate_notes.sql
+ * - supabase/migrations/20260810120000_create_company_profile.sql
  *
  * TODO: Future Digital Twin will organize photos by Building → Floor → Room → Wall.
  */
@@ -37,6 +39,45 @@ export type LossStatus =
 export type Database = {
   public: {
     Tables: {
+      company_profile: {
+        Row: {
+          id: string;
+          singleton_key: boolean;
+          company_name: string;
+          phone: string | null;
+          email: string | null;
+          website: string | null;
+          address: string | null;
+          logo_url: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          singleton_key?: boolean;
+          company_name: string;
+          phone?: string | null;
+          email?: string | null;
+          website?: string | null;
+          address?: string | null;
+          logo_url?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          singleton_key?: boolean;
+          company_name?: string;
+          phone?: string | null;
+          email?: string | null;
+          website?: string | null;
+          address?: string | null;
+          logo_url?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       losses: {
         Row: {
           id: string;
@@ -610,5 +651,8 @@ export type RoomMeasurementRow =
   Database["public"]["Tables"]["room_measurements"]["Row"];
 export type PriceCatalogItemRow =
   Database["public"]["Tables"]["price_catalog_items"]["Row"];
+export type CompanyProfileRow =
+  Database["public"]["Tables"]["company_profile"]["Row"];
 
 export const ROOM_PHOTOS_BUCKET = "room-photos" as const;
+export const COMPANY_ASSETS_BUCKET = "company-assets" as const;

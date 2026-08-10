@@ -37,6 +37,7 @@ import {
   getRoomQuantitySourceValue,
 } from "@/lib/utils/estimateQuantitySource";
 import {
+  buildEstimateDocumentData,
   formatEstimateDate,
   formatEstimateNumber,
 } from "@/lib/utils/estimateDocument";
@@ -168,6 +169,8 @@ export function EstimateWorkspace({
     (state) => state.updateEstimateNotes
   );
   const clearEstimateError = useTwinStore((state) => state.clearEstimateError);
+  const companyProfile = useTwinStore((state) => state.companyProfile);
+  const loadCompanyProfile = useTwinStore((state) => state.loadCompanyProfile);
 
   const [notesDraft, setNotesDraft] = useState(estimateNotes ?? "");
   const [notesSaveMessage, setNotesSaveMessage] = useState<string | null>(null);
@@ -200,6 +203,35 @@ export function EstimateWorkspace({
   useEffect(() => {
     setNotesDraft(estimateNotes ?? "");
   }, [estimate.id, estimateNotes]);
+
+  useEffect(() => {
+    if (!companyProfile) {
+      void loadCompanyProfile().catch(() => {
+        // companyProfileError is stored; preview falls back to RestorationOS
+      });
+    }
+  }, [companyProfile, loadCompanyProfile]);
+
+  const documentData = useMemo(
+    () =>
+      buildEstimateDocumentData({
+        company: companyProfile,
+        estimate: { ...estimate, notes: estimateNotes },
+        loss,
+        areas,
+        lineItemsByAreaId,
+        rooms,
+      }),
+    [
+      areas,
+      companyProfile,
+      estimate,
+      estimateNotes,
+      lineItemsByAreaId,
+      loss,
+      rooms,
+    ]
+  );
 
   const availableRooms = useMemo(() => {
     const linkedRoomIds = new Set(
@@ -592,13 +624,7 @@ export function EstimateWorkspace({
       ) : null}
 
       {viewMode === "preview" ? (
-        <EstimateDocumentPreview
-          loss={loss}
-          estimate={{ ...estimate, notes: estimateNotes }}
-          areas={areas}
-          lineItemsByAreaId={lineItemsByAreaId}
-          rooms={rooms}
-        />
+        <EstimateDocumentPreview document={documentData} />
       ) : (
         <>
       <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">

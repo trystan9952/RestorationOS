@@ -99,6 +99,7 @@ export {
   deleteEstimateArea,
   deleteEstimateLineItem,
   getEstimateAreas,
+  getEstimateById,
   getEstimateByLossId,
   getEstimateLineItems,
   updateEstimateArea,
@@ -110,6 +111,14 @@ export {
   type UpdateEstimateAreaInput,
   type UpdateEstimateLineItemInput,
 } from "@/lib/database/estimateRepository";
+
+export {
+  deleteCompanyLogo,
+  getCompanyProfile,
+  getOrCreateCompanyProfile,
+  saveCompanyProfile,
+  uploadCompanyLogo,
+} from "@/lib/database/companyProfileRepository";
 
 export {
   createRoomMeasurement,
