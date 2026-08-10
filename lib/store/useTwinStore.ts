@@ -80,6 +80,12 @@ type TwinState = {
    */
   hydrateFromDatabase: () => Promise<void>;
 
+  /**
+   * Load photos/moisture/notes/equipment for every room in the active loss.
+   * Reuses existing repositories and room-keyed caches (for dashboard counts/activity).
+   */
+  loadLossRoomDetails: () => Promise<void>;
+
   loadRoomPhotos: (roomId: string) => Promise<Photo[]>;
   uploadRoomPhotos: (roomId: string, files: File[]) => Promise<Photo[]>;
   clearPhotoError: () => void;
@@ -252,6 +258,63 @@ export const useTwinStore = create<TwinState>((set, get) => ({
         status: "idle",
       });
     }),
+
+  loadLossRoomDetails: async () => {
+    const rooms = get().rooms;
+
+    if (rooms.length === 0) {
+      return;
+    }
+
+    try {
+      const results = await Promise.all(
+        rooms.map(async (room) => {
+          const [photos, moistureReadings, notes, equipment] =
+            await Promise.all([
+              getPhotos(room.id),
+              getMoistureReadings(room.id),
+              getRoomNotes(room.id),
+              getEquipment(room.id),
+            ]);
+
+          return {
+            roomId: room.id,
+            photos,
+            moistureReadings,
+            notes,
+            equipment,
+          };
+        })
+      );
+
+      set((state) => {
+        const photosByRoomId = { ...state.photosByRoomId };
+        const moistureByRoomId = { ...state.moistureByRoomId };
+        const notesByRoomId = { ...state.notesByRoomId };
+        const equipmentByRoomId = { ...state.equipmentByRoomId };
+
+        for (const row of results) {
+          photosByRoomId[row.roomId] = row.photos;
+          moistureByRoomId[row.roomId] = row.moistureReadings;
+          notesByRoomId[row.roomId] = row.notes;
+          equipmentByRoomId[row.roomId] = row.equipment;
+        }
+
+        return {
+          photosByRoomId,
+          moistureByRoomId,
+          notesByRoomId,
+          equipmentByRoomId,
+        };
+      });
+    } catch (error) {
+      set({
+        error: getErrorMessage(error),
+        status: "error",
+      });
+      throw error;
+    }
+  },
 
   loadRoomPhotos: async (roomId) => {
     set({ photoStatus: "loading", photoError: null });
@@ -603,6 +666,11 @@ export const useTwinStore = create<TwinState>((set, get) => ({
         activeLoss: loss,
         address: loss.address,
         customer: loss.customer,
+        rooms: [],
+        photosByRoomId: {},
+        moistureByRoomId: {},
+        notesByRoomId: {},
+        equipmentByRoomId: {},
         status: "idle",
       });
 

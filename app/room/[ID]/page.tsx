@@ -83,12 +83,17 @@ export default function RoomPage() {
           </div>
         ) : null}
 
-        <Link
-          href="/rooms"
-          className="mt-10 inline-block text-blue-400 hover:text-blue-300"
-        >
-          ← Back to Rooms
-        </Link>
+        <nav className="mt-10 flex flex-wrap gap-x-6 gap-y-2">
+          <Link
+            href="/dashboard"
+            className="text-blue-400 hover:text-blue-300"
+          >
+            ← Back to Dashboard
+          </Link>
+          <Link href="/rooms" className="text-blue-400 hover:text-blue-300">
+            ← Back to Rooms
+          </Link>
+        </nav>
       </div>
     </main>
   );
