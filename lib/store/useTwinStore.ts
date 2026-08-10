@@ -2,9 +2,11 @@ import { create } from "zustand";
 
 import {
   createLoss,
+  createMoistureReading,
   createRoom,
   deleteRoom as removePersistedRoom,
   getLoss,
+  getMoistureReadings,
   getPhotos,
   getRooms,
   updateRoom as persistRoomUpdate,
@@ -15,6 +17,7 @@ import {
 } from "@/lib/database";
 import { getErrorMessage } from "@/lib/database/errors";
 import type { Loss } from "@/lib/domain/Loss";
+import type { MoistureReading } from "@/lib/domain/MoistureReading";
 import type { Photo } from "@/lib/domain/Photo";
 import type { Room } from "@/lib/domain/Room";
 import { runAsyncAction } from "@/lib/store/async";
@@ -34,6 +37,11 @@ type TwinState = {
   photoStatus: AsyncStatus;
   photoError: string | null;
   isUploadingPhotos: boolean;
+
+  /** Frontend cache of persisted moisture readings, keyed by room id. */
+  moistureByRoomId: Record<string, MoistureReading[]>;
+  moistureError: string | null;
+  isSavingMoisture: boolean;
 
   activeLossId: string | null;
   activeLoss: Loss | null;
@@ -57,6 +65,15 @@ type TwinState = {
   loadRoomPhotos: (roomId: string) => Promise<Photo[]>;
   uploadRoomPhotos: (roomId: string, files: File[]) => Promise<Photo[]>;
   clearPhotoError: () => void;
+
+  loadMoistureReadings: (roomId: string) => Promise<MoistureReading[]>;
+  saveMoistureReading: (input: {
+    roomId: string;
+    material: string;
+    reading: number;
+    location: string;
+  }) => Promise<MoistureReading>;
+  clearMoistureError: () => void;
 
   setActiveLossId: (lossId: string | null) => void;
   clearError: () => void;
@@ -136,6 +153,10 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   photoError: null,
   isUploadingPhotos: false,
 
+  moistureByRoomId: {},
+  moistureError: null,
+  isSavingMoisture: false,
+
   activeLossId: null,
   activeLoss: null,
 
@@ -154,6 +175,8 @@ export const useTwinStore = create<TwinState>((set, get) => ({
   clearError: () => set({ error: null, status: "idle" }),
 
   clearPhotoError: () => set({ photoError: null, photoStatus: "idle" }),
+
+  clearMoistureError: () => set({ moistureError: null }),
 
   hydrateFromDatabase: async () =>
     runAsyncAction(set, async () => {
@@ -249,6 +272,71 @@ export const useTwinStore = create<TwinState>((set, get) => ({
         photoStatus: "error",
         photoError: getErrorMessage(error),
         isUploadingPhotos: false,
+      });
+      throw error;
+    }
+  },
+
+  loadMoistureReadings: async (roomId) => {
+    set({ moistureError: null });
+
+    try {
+      const readings = await getMoistureReadings(roomId);
+
+      set((state) => ({
+        moistureByRoomId: {
+          ...state.moistureByRoomId,
+          [roomId]: readings,
+        },
+        moistureError: null,
+      }));
+
+      return readings;
+    } catch (error) {
+      set({
+        moistureError: getErrorMessage(error),
+      });
+      throw error;
+    }
+  },
+
+  saveMoistureReading: async (input) => {
+    if (get().isSavingMoisture) {
+      throw new Error("A moisture reading is already being saved");
+    }
+
+    set({
+      isSavingMoisture: true,
+      moistureError: null,
+    });
+
+    try {
+      const lossId = await ensureActiveLossId(get, set);
+
+      await createMoistureReading({
+        lossId,
+        roomId: input.roomId,
+        material: input.material,
+        reading: input.reading,
+        location: input.location,
+      });
+
+      const readings = await getMoistureReadings(input.roomId);
+
+      set((state) => ({
+        moistureByRoomId: {
+          ...state.moistureByRoomId,
+          [input.roomId]: readings,
+        },
+        isSavingMoisture: false,
+        moistureError: null,
+      }));
+
+      return readings[0]!;
+    } catch (error) {
+      set({
+        isSavingMoisture: false,
+        moistureError: getErrorMessage(error),
       });
       throw error;
     }

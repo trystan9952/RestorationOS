@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import { Header } from "@/components/layout/Header";
+import { MoistureReadings } from "@/components/moisture/MoistureReadings";
 import { PhotoUploader } from "@/components/photos/PhotoUploader";
 import { useTwinStore } from "@/lib/store/useTwinStore";
 
@@ -14,6 +15,9 @@ export default function RoomPage() {
 
   const hydrateFromDatabase = useTwinStore((state) => state.hydrateFromDatabase);
   const loadRoomPhotos = useTwinStore((state) => state.loadRoomPhotos);
+  const loadMoistureReadings = useTwinStore(
+    (state) => state.loadMoistureReadings
+  );
   const room = useTwinStore((state) =>
     state.rooms.find((item) => item.id === roomId)
   );
@@ -22,10 +26,13 @@ export default function RoomPage() {
     void (async () => {
       await hydrateFromDatabase();
       if (roomId) {
-        await loadRoomPhotos(roomId);
+        await Promise.all([
+          loadRoomPhotos(roomId),
+          loadMoistureReadings(roomId),
+        ]);
       }
     })();
-  }, [hydrateFromDatabase, loadRoomPhotos, roomId]);
+  }, [hydrateFromDatabase, loadMoistureReadings, loadRoomPhotos, roomId]);
 
   const title = room?.name ?? "Room not found";
   const subtitle = room
@@ -46,9 +53,7 @@ export default function RoomPage() {
 
             <div className="grid gap-6 md:grid-cols-3">
               <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-                <h2 className="text-xl font-bold">💧 Moisture</h2>
-                {/* TODO: Save moisture readings */}
-                <p className="mt-4 text-slate-400">No readings yet.</p>
+                <MoistureReadings roomId={roomId} />
               </div>
 
               <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">

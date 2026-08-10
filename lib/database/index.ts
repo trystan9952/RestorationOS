@@ -41,6 +41,7 @@ export {
 export {
   createMoistureReading,
   deleteMoistureReading,
+  getMoistureReadings,
   listMoistureReadingsByRoomId,
   type CreateMoistureReadingInput,
 } from "@/lib/database/moistureRepository";

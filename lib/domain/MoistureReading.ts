@@ -1,11 +1,15 @@
 /**
- * Moisture reading captured for a room or material.
- * TODO: Finalize fields when moisture schema is designed.
+ * Moisture reading captured for a room material/location.
+ *
+ * TODO: Future Digital Twin may attach readings to Wall.
+ * Wall relationships are intentionally omitted in this MVP.
  */
 export interface MoistureReading {
   id: string;
+  lossId: string;
   roomId: string;
-  value: number;
-  unit: string;
-  recordedAt: string;
+  material: string;
+  reading: number;
+  location: string;
+  createdAt: string;
 }
