@@ -9,6 +9,7 @@ import { Header } from "@/components/layout/Header";
 import { MoistureReadings } from "@/components/moisture/MoistureReadings";
 import { RoomNotes } from "@/components/notes/RoomNotes";
 import { PhotoUploader } from "@/components/photos/PhotoUploader";
+import { RoomTimeline } from "@/components/twin/RoomTimeline";
 import { useTwinStore } from "@/lib/store/useTwinStore";
 
 export default function RoomPage() {
@@ -49,8 +50,8 @@ export default function RoomPage() {
 
   const title = room?.name ?? "Room not found";
   const subtitle = room
-    ? "Digital Twin Room"
-    : "This room is not in the current twin session.";
+    ? "Room"
+    : "This room is not in the current loss.";
 
   return (
     <main className="min-h-screen bg-slate-950 p-8 text-white">
@@ -59,6 +60,8 @@ export default function RoomPage() {
 
         {room ? (
           <div className="grid gap-6">
+            <RoomTimeline roomId={roomId} />
+
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
               <h2 className="mb-6 text-2xl font-bold">📷 Photos</h2>
               <PhotoUploader roomId={roomId} />

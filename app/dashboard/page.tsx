@@ -7,7 +7,7 @@ export default function DashboardPage() {
     <main className="min-h-screen bg-slate-950 p-8 text-white">
       <div className="mx-auto max-w-6xl">
         <Header
-          title="Digital Twin"
+          title="Dashboard"
           subtitle="Welcome to RestorationOS"
         />
 
@@ -28,7 +28,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-            <h2 className="text-xl font-bold">Twin Status</h2>
+            <h2 className="text-xl font-bold">Status</h2>
             <p className="mt-4 text-yellow-400">Initializing</p>
           </div>
         </div>

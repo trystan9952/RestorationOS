@@ -5,3 +5,12 @@ export type { MoistureReading } from "@/lib/domain/MoistureReading";
 export type { Photo } from "@/lib/domain/Photo";
 export type { Room, RoomCategory, RoomClass } from "@/lib/domain/Room";
 export type { RoomNote } from "@/lib/domain/RoomNote";
+export type {
+  EquipmentPlacedTimelineEvent,
+  EquipmentRemovedTimelineEvent,
+  MoistureTimelineEvent,
+  NoteTimelineEvent,
+  PhotoTimelineEvent,
+  TimelineEvent,
+  TimelineEventType,
+} from "@/lib/domain/TimelineEvent";
